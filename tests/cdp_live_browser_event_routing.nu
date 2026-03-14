@@ -11,13 +11,7 @@ def main [http_port: int, fixture_port: int] {
     cdp call $page.session "Network.enable" | ignore
     cdp call $page.session "Page.navigate" { url: "about:blank" } | ignore
     wait-for-load $page.session | ignore
-
-    for _ in 0..20 {
-        let pending = (cdp event $page.session --max-time 50ms)
-        if (is nothing $pending) {
-            break
-        }
-    }
+    drain-events $page.session
 
     cdp call $page.session "Runtime.evaluate" {
         expression: "setTimeout(() => console.log('solo-event'), 50); true"
@@ -50,6 +44,8 @@ def main [http_port: int, fixture_port: int] {
     let console_begin = (cdp event $page.session "Runtime.consoleAPICalled" --max-time 5sec)
     let request_a = (cdp event $page.session "Network.requestWillBeSent" --max-time 5sec)
     let request_b = (cdp event $page.session "Network.requestWillBeSent" --max-time 5sec)
+    let failed_a = (cdp event $page.session "Network.loadingFailed" --max-time 5sec)
+    let failed_b = (cdp event $page.session "Network.loadingFailed" --max-time 5sec)
     let console_end = (cdp event $page.session "Runtime.consoleAPICalled" --max-time 5sec)
 
     assert equal ($console_begin.params.args | get 0.value) "storm-begin"
@@ -58,6 +54,10 @@ def main [http_port: int, fixture_port: int] {
     let request_urls = [$request_a.params.request.url $request_b.params.request.url] | str join "\n"
     assert str contains $request_urls "source=event-a"
     assert str contains $request_urls "source=event-b"
+    assert equal $failed_a.params.errorText "net::ERR_FAILED"
+    assert equal $failed_b.params.errorText "net::ERR_FAILED"
+    assert equal $failed_a.params.corsErrorStatus.corsError "InsecureLocalNetwork"
+    assert equal $failed_b.params.corsErrorStatus.corsError "InsecureLocalNetwork"
 
     mut drained_to_idle = false
 

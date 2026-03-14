@@ -95,3 +95,16 @@ export def "wait-for-load" [session: string, --max-time(-m): duration = 5sec] {
     assert some $load $"Timed out waiting for Page.loadEventFired on ($session)"
     $load
 }
+
+export def "drain-events" [
+    session: string
+    --max-time(-m): duration = 50ms
+    --iterations(-i): int = 20
+] {
+    for _ in 0..$iterations {
+        let pending = (cdp event $session --max-time $max_time)
+        if (is nothing $pending) {
+            break
+        }
+    }
+}
