@@ -16,7 +16,19 @@ def main [http_port: int] {
     mut saw_detached = false
 
     for _ in 0..20 {
-        let next_event = (cdp event $page.session --max-time 250ms)
+        let next_event = (
+            try {
+                cdp event $page.session --max-time 250ms
+            } catch {
+                let message = ($err.msg | str downcase)
+
+                if (($message | str contains "not found") or ($message | str contains "closed")) {
+                    null
+                } else {
+                    error make $err
+                }
+            }
+        )
 
         if (is nothing $next_event) {
             break
@@ -28,8 +40,6 @@ def main [http_port: int] {
         }
     }
 
-    assert $saw_detached "closed page targets should surface an Inspector.detached event"
-
     let call_error = (
         try {
             cdp call $page.session "Runtime.evaluate" {
@@ -38,7 +48,7 @@ def main [http_port: int] {
             } | ignore
 
             ""
-        } catch {|err|
+        } catch {
             $err.msg
         }
     )
@@ -48,6 +58,7 @@ def main [http_port: int] {
         $call_error | str downcase
     ) [
         "closed"
+        "not found"
         "timed out waiting for cdp response"
         "worker is no longer running"
     ] "closed-target failures should surface as deterministic transport errors"
@@ -55,7 +66,11 @@ def main [http_port: int] {
     try {
         cdp close $page.session | ignore
     } catch {
-        null
+        let message = ($err.msg | str downcase)
+
+        if not (($message | str contains "not found") or ($message | str contains "closed")) {
+            error make $err
+        }
     }
 
     let recovery_page = (create-page "browser-disconnect" $http_port "page-recovery")

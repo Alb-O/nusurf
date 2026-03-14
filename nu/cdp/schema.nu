@@ -1,16 +1,9 @@
 use common.nu *
 
-const cdp_schema_files = [
-    (path self ../../schema/cdp/browser_protocol.json)
-    (path self ../../schema/cdp/js_protocol.json)
-]
+const cdp_schema_file = (path self ../../schema/cdp/protocol.nuon)
 
 export def schema-domains-raw [] {
-    $cdp_schema_files
-    | each {|path|
-        open $path | get domains
-    }
-    | flatten
+    open $cdp_schema_file | get domains
 }
 
 export def schema-domains [domain?: string] {
@@ -269,37 +262,37 @@ export def "cdp schema domains" [] {
 }
 
 export def "cdp schema commands" [
-    domain?: string@complete-cdp-domain
+    domain?: string
 ] {
     schema-commands $domain
 }
 
 export def "cdp schema events" [
-    domain?: string@complete-cdp-domain
+    domain?: string
 ] {
     schema-events $domain
 }
 
 export def "cdp schema types" [
-    domain?: string@complete-cdp-domain
+    domain?: string
 ] {
     schema-types $domain
 }
 
 export def "cdp schema command" [
-    qualified: string@complete-cdp-command
+    qualified: string
 ] {
     schema-lookup "command" $qualified
 }
 
 export def "cdp schema event" [
-    qualified: string@complete-cdp-event
+    qualified: string
 ] {
     schema-lookup "event" $qualified
 }
 
 export def "cdp schema type" [
-    qualified: string@complete-cdp-type
+    qualified: string
 ] {
     schema-lookup "type" $qualified
 }

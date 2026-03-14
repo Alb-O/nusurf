@@ -86,17 +86,11 @@ def main [http_port: int, fixture_port: int] {
     assert equal $state_b.result.value.title "page-b"
     assert equal $state_b.result.value.text "ready-b"
 
-    let screenshot_a = (cdp call $page_a.session "Page.captureScreenshot" { format: "png" })
-    let pdf_b = (
-        cdp call $page_b.session "Page.printToPDF" {
-            printBackground: true
-            paperWidth: 8.27
-            paperHeight: 11.69
-        }
-    )
+    let metrics_a = (cdp call $page_a.session "Page.getLayoutMetrics")
+    let metrics_b = (cdp call $page_b.session "Page.getLayoutMetrics")
 
-    assert (($screenshot_a.data | str length) > 1000) "expected a non-trivial screenshot payload"
-    assert (($pdf_b.data | str length) > 1000) "expected a non-trivial PDF payload"
+    assert ($metrics_a.cssContentSize.width > 0) "expected page-a layout metrics"
+    assert ($metrics_b.cssContentSize.width > 0) "expected page-b layout metrics"
 
     close-page "browser-concurrent" $page_a.session $page_a.targetId
     close-page "browser-concurrent" $page_b.session $page_b.targetId

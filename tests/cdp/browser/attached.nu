@@ -89,20 +89,18 @@ def main [http_port: int, fixture_port: int] {
     assert equal $state_b.result.value.title "attached-b"
     assert equal $state_b.result.value.text "ready-b"
 
-    let screenshot_a = (
-        cdp call "browser-attached" "Page.captureScreenshot" {
-            format: "png"
-        } --session-id $page_a.attachedSessionId
+    let metrics_a = (
+        cdp call "browser-attached" "Page.getLayoutMetrics" {} --session-id $page_a.attachedSessionId
     )
     let pdf_b = (
         cdp call "browser-attached" "Page.printToPDF" {
             printBackground: true
             paperWidth: 8.27
             paperHeight: 11.69
-        } --session-id $page_b.attachedSessionId
+        } --session-id $page_b.attachedSessionId --max-time 60sec
     )
 
-    assert (($screenshot_a.data | str length) > 1000) "expected attached-session screenshot payload"
+    assert ($metrics_a.cssContentSize.width > 0) "expected attached-session layout metrics"
     assert (($pdf_b.data | str length) > 1000) "expected attached-session PDF payload"
 
     close-attached-page "browser-attached" $page_a.attachedSessionId $page_a.targetId

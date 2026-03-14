@@ -30,17 +30,29 @@ pub(super) fn session_value(id: &str, url: &str, span: nu_protocol::Span) -> Val
 }
 
 pub(super) fn session_client(session_id: &str) -> Result<SessionClient, LabeledError> {
-	let sessions = sessions_mut()?;
-	sessions
-		.get(session_id)
-		.map(|entry| entry.client.clone())
-		.ok_or_else(|| LabeledError::new(format!("Session '{}' was not found", session_id)))
+	let mut sessions = sessions_mut()?;
+	prune_closed_sessions(&mut sessions);
+
+	let Some(client) = sessions.get(session_id).map(|entry| entry.client.clone()) else {
+		return Err(LabeledError::new(format!("Session '{}' was not found", session_id)));
+	};
+
+	if client.is_closed() {
+		sessions.remove(session_id);
+		return Err(LabeledError::new(format!("Session '{}' is closed", session_id)));
+	}
+
+	Ok(client)
 }
 
 pub(super) fn sessions_mut() -> Result<MutexGuard<'static, HashMap<String, SessionEntry>>, LabeledError> {
 	SESSIONS
 		.lock()
 		.map_err(|_| LabeledError::new("Failed to lock session registry"))
+}
+
+pub(super) fn prune_closed_sessions(sessions: &mut HashMap<String, SessionEntry>) {
+	sessions.retain(|_, entry| !entry.client.is_closed());
 }
 
 pub(super) fn session_sort_key(value: &Value) -> String {

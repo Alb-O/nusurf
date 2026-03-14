@@ -25,9 +25,13 @@ use {
 };
 
 const SOCKET_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const MAX_RAW_MESSAGES: usize = 1024;
+const MAX_ROUTED_RESPONSES: usize = 1024;
+const MAX_ROUTED_EVENTS: usize = 1024;
 
 type WebSocketStream = WebSocket<MaybeTlsStream<TcpStream>>;
 type SharedSessionState = Arc<(Mutex<SessionQueues>, Condvar)>;
+type RoutedJson = Arc<JsonValue>;
 
 enum ControlMessage {
 	Send(Vec<u8>),
@@ -71,10 +75,12 @@ pub struct WebSocketClient {
 
 struct SessionQueues {
 	raw_messages: VecDeque<ReceivedMessage>,
-	responses_by_id: HashMap<String, VecDeque<JsonValue>>,
-	events_all: VecDeque<JsonValue>,
-	events_by_method: HashMap<String, VecDeque<JsonValue>>,
+	responses_by_id: HashMap<String, VecDeque<RoutedJson>>,
+	responses_all: VecDeque<(String, RoutedJson)>,
+	events_all: VecDeque<RoutedJson>,
+	events_by_method: HashMap<String, VecDeque<RoutedJson>>,
 	closed: bool,
+	close_reason: Option<String>,
 }
 
 enum ControlFlow {
@@ -229,6 +235,11 @@ impl SessionClient {
 		self.handle.close()
 	}
 
+	/// Whether the session worker has already observed the socket as closed.
+	pub fn is_closed(&self) -> bool {
+		self.handle.closed.load(Ordering::SeqCst)
+	}
+
 	fn wait_for<T, F>(
 		&self, timeout: Option<Duration>, signals: &Signals, span: Span, mut pop: F,
 	) -> Result<Option<T>, String>
@@ -245,7 +256,10 @@ impl SessionClient {
 				return Ok(Some(item));
 			}
 			if queues.closed {
-				return Ok(None);
+				return Err(queues
+					.close_reason
+					.clone()
+					.unwrap_or_else(|| "WebSocket session is closed".to_string()));
 			}
 			if let Err(e) = signals.check(&span) {
 				return Err(e.to_string());
@@ -293,12 +307,7 @@ fn open_websocket(url: Url, headers: HashMap<String, String>) -> Option<WebSocke
 	log::trace!("Building WebSocket request for: {url}");
 
 	let mut builder = ClientRequestBuilder::new(url.as_str().parse().ok()?);
-	let origin = format!(
-		"{}://{}:{}",
-		url.scheme(),
-		url.host_str().unwrap_or_default(),
-		url.port().unwrap_or_default()
-	);
+	let origin = websocket_origin(&url);
 
 	log::trace!("Setting Origin header to: {origin}");
 	builder = builder.with_header("Origin", origin);
@@ -321,6 +330,15 @@ fn open_websocket(url: Url, headers: HashMap<String, String>) -> Option<WebSocke
 			None
 		}
 	}
+}
+
+fn websocket_origin(url: &Url) -> String {
+	let mut origin = format!("{}://{}", url.scheme(), url.host_str().unwrap_or_default());
+	if let Some(port) = url.port() {
+		origin.push(':');
+		origin.push_str(&port.to_string());
+	}
+	origin
 }
 
 fn connect_components(
@@ -347,9 +365,11 @@ fn connect_session_components(
 		Mutex::new(SessionQueues {
 			raw_messages: VecDeque::new(),
 			responses_by_id: HashMap::new(),
+			responses_all: VecDeque::new(),
 			events_all: VecDeque::new(),
 			events_by_method: HashMap::new(),
 			closed: false,
+			close_reason: None,
 		}),
 		Condvar::new(),
 	));
@@ -438,20 +458,20 @@ fn spawn_session_worker_thread(
 			loop {
 				if closed.load(Ordering::SeqCst) {
 					let _ = websocket.close(Some(normal_close("session closed")));
-					mark_session_closed(&state);
+					mark_session_closed(&state, "WebSocket session is closed");
 					return;
 				}
 
 				match flush_control_messages(&mut websocket, &rx_control, &closed) {
 					Ok(ControlFlow::Continue) => {}
 					Ok(ControlFlow::Closed) => {
-						mark_session_closed(&state);
+						mark_session_closed(&state, "WebSocket session is closed");
 						return;
 					}
 					Err(e) => {
 						log::error!("WebSocket control error: {e}");
 						closed.store(true, Ordering::SeqCst);
-						mark_session_closed(&state);
+						mark_session_closed(&state, format!("WebSocket control error: {e}"));
 						return;
 					}
 				}
@@ -462,7 +482,7 @@ fn spawn_session_worker_thread(
 					Ok(Message::Close(_)) => {
 						log::debug!("Received Close message");
 						closed.store(true, Ordering::SeqCst);
-						mark_session_closed(&state);
+						mark_session_closed(&state, "WebSocket session was closed by the remote peer");
 						return;
 					}
 					Ok(other) => {
@@ -475,13 +495,13 @@ fn spawn_session_worker_thread(
 					Err(WsError::ConnectionClosed | WsError::AlreadyClosed) => {
 						log::debug!("WebSocket closed");
 						closed.store(true, Ordering::SeqCst);
-						mark_session_closed(&state);
+						mark_session_closed(&state, "WebSocket session is closed");
 						return;
 					}
 					Err(e) => {
 						log::error!("WebSocket read error: {e:?}");
 						closed.store(true, Ordering::SeqCst);
-						mark_session_closed(&state);
+						mark_session_closed(&state, format!("WebSocket read error: {e}"));
 						return;
 					}
 				}
@@ -520,34 +540,89 @@ fn enqueue_session_message(state: &SharedSessionState, message: ReceivedMessage)
 			&& let Ok(json) = serde_json::from_str::<JsonValue>(text)
 		{
 			if let Some(id) = json_id_key(&json) {
-				queues.responses_by_id.entry(id).or_default().push_back(json);
+				push_response(&mut queues, id, Arc::new(json));
 			} else if let Some(method) = json_method_key(&json) {
-				// Keep both a global event queue and per-method queues so consumers can
-				// mix filtered and unfiltered reads without reclassifying messages later.
-				queues.events_all.push_back(json.clone());
-				queues.events_by_method.entry(method).or_default().push_back(json);
+				push_event(&mut queues, method, Arc::new(json));
 			}
 		}
 
 		queues.raw_messages.push_back(message);
+		while queues.raw_messages.len() > MAX_RAW_MESSAGES {
+			let _ = queues.raw_messages.pop_front();
+		}
 		condvar.notify_all();
 	}
 }
 
-fn mark_session_closed(state: &SharedSessionState) {
+fn push_response(queues: &mut SessionQueues, id: String, response: RoutedJson) {
+	queues
+		.responses_by_id
+		.entry(id.clone())
+		.or_default()
+		.push_back(response.clone());
+	queues.responses_all.push_back((id, response));
+
+	while queues.responses_all.len() > MAX_ROUTED_RESPONSES {
+		let Some((old_id, old_response)) = queues.responses_all.pop_front() else {
+			break;
+		};
+		let empty = if let Some(queue) = queues.responses_by_id.get_mut(&old_id) {
+			remove_matching_event(queue, &old_response);
+			queue.is_empty()
+		} else {
+			false
+		};
+
+		if empty {
+			queues.responses_by_id.remove(&old_id);
+		}
+	}
+}
+
+fn push_event(queues: &mut SessionQueues, method: String, event: RoutedJson) {
+	// Keep both a global event queue and per-method queues so consumers can mix
+	// filtered and unfiltered reads without reparsing messages later.
+	queues.events_all.push_back(event.clone());
+	queues.events_by_method.entry(method).or_default().push_back(event);
+
+	while queues.events_all.len() > MAX_ROUTED_EVENTS {
+		let Some(old_event) = queues.events_all.pop_front() else {
+			break;
+		};
+		let Some(method) = json_method_key(old_event.as_ref()) else {
+			continue;
+		};
+		let empty = if let Some(queue) = queues.events_by_method.get_mut(&method) {
+			remove_matching_event(queue, &old_event);
+			queue.is_empty()
+		} else {
+			false
+		};
+
+		if empty {
+			queues.events_by_method.remove(&method);
+		}
+	}
+}
+
+fn mark_session_closed(state: &SharedSessionState, reason: impl Into<String>) {
 	let (lock, condvar) = &**state;
 	if let Ok(mut queues) = lock.lock() {
 		queues.closed = true;
+		if queues.close_reason.is_none() {
+			queues.close_reason = Some(reason.into());
+		}
 		condvar.notify_all();
 	}
 }
 
 fn pop_response(queues: &mut SessionQueues, id: &str) -> Option<JsonValue> {
-	let response = queues.responses_by_id.get_mut(id)?.pop_front();
+	let response = queues.responses_by_id.get_mut(id)?.pop_front()?;
 	if matches!(queues.responses_by_id.get(id), Some(queue) if queue.is_empty()) {
 		queues.responses_by_id.remove(id);
 	}
-	response
+	remove_matching_response(&mut queues.responses_all, id, &response);
+	Some(response.as_ref().clone())
 }
 
 fn pop_event(queues: &mut SessionQueues, method: Option<&str>, session_id: Option<&str>) -> Option<JsonValue> {
@@ -561,11 +636,11 @@ fn pop_event(queues: &mut SessionQueues, method: Option<&str>, session_id: Optio
 				queues.events_by_method.remove(method);
 			}
 
-			Some(event)
+			Some(event.as_ref().clone())
 		}
 		None => {
 			let event = pop_matching_event(&mut queues.events_all, session_id)?;
-			let method = json_method_key(&event)?;
+			let method = json_method_key(event.as_ref())?;
 			let empty_after_remove = if let Some(queue) = queues.events_by_method.get_mut(&method) {
 				remove_matching_event(queue, &event);
 				queue.is_empty()
@@ -577,25 +652,34 @@ fn pop_event(queues: &mut SessionQueues, method: Option<&str>, session_id: Optio
 				queues.events_by_method.remove(&method);
 			}
 
-			Some(event)
+			Some(event.as_ref().clone())
 		}
 	}
 }
 
-fn pop_matching_event(queue: &mut VecDeque<JsonValue>, session_id: Option<&str>) -> Option<JsonValue> {
+fn pop_matching_event(queue: &mut VecDeque<RoutedJson>, session_id: Option<&str>) -> Option<RoutedJson> {
 	match session_id {
 		Some(session_id) => {
 			let index = queue
 				.iter()
-				.position(|event| json_session_id_key(event).as_deref() == Some(session_id))?;
+				.position(|event| json_session_id_key(event.as_ref()).as_deref() == Some(session_id))?;
 			queue.remove(index)
 		}
 		None => queue.pop_front(),
 	}
 }
 
-fn remove_matching_event(queue: &mut VecDeque<JsonValue>, needle: &JsonValue) {
-	if let Some(index) = queue.iter().position(|candidate| candidate == needle) {
+fn remove_matching_event(queue: &mut VecDeque<RoutedJson>, needle: &RoutedJson) {
+	if let Some(index) = queue.iter().position(|candidate| Arc::ptr_eq(candidate, needle)) {
+		queue.remove(index);
+	}
+}
+
+fn remove_matching_response(queue: &mut VecDeque<(String, RoutedJson)>, id: &str, needle: &RoutedJson) {
+	if let Some(index) = queue
+		.iter()
+		.position(|(candidate_id, candidate)| candidate_id == id && Arc::ptr_eq(candidate, needle))
+	{
 		queue.remove(index);
 	}
 }
@@ -726,4 +810,21 @@ pub fn request_headers(headers: Option<Value>) -> Result<HashMap<String, String>
 		}
 	}
 	Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn websocket_origin_omits_missing_port() {
+		let url = Url::parse("wss://example.com/devtools/browser/abc").unwrap();
+		assert_eq!(websocket_origin(&url), "wss://example.com");
+	}
+
+	#[test]
+	fn websocket_origin_keeps_explicit_port() {
+		let url = Url::parse("ws://127.0.0.1:9222/devtools/browser/abc").unwrap();
+		assert_eq!(websocket_origin(&url), "ws://127.0.0.1:9222");
+	}
 }

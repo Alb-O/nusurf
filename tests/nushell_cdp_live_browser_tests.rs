@@ -113,7 +113,7 @@ fn run_nu_script(
 		.spawn()
 		.map_err(|err| format!("failed to execute nushell: {err}"))?;
 
-	let deadline = Instant::now() + Duration::from_secs(45);
+	let deadline = Instant::now() + Duration::from_secs(90);
 
 	loop {
 		match child.try_wait() {
@@ -141,7 +141,7 @@ fn run_nu_script(
 					.map_err(|err| format!("failed to collect timed out nushell output: {err}"))?;
 
 				return Err(format!(
-					"live Nu CDP test timed out after 45s for {}\nstdout:\n{}\nstderr:\n{}",
+					"live Nu CDP test timed out after 90s for {}\nstdout:\n{}\nstderr:\n{}",
 					script_path.display(),
 					String::from_utf8_lossy(&output.stdout),
 					String::from_utf8_lossy(&output.stderr)

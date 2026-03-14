@@ -601,6 +601,7 @@ fn handle_early_close_connection(stream: TcpStream) {
 
 	// Send one message then immediately close
 	let _ = ws_stream.send(Message::Text("Closing soon".to_string().into()));
+	thread::sleep(Duration::from_millis(100));
 	let _ = ws_stream.send(Message::Close(None));
 }
 
@@ -681,6 +682,43 @@ fn test_persistent_websocket_session_lifecycle() {
 
 	let closed = eval_to_value(&mut plugin_test, &format!(r#"ws close "{}""#, session_name));
 	assert_eq!(record_string(&closed, "id"), session_name);
+
+	let listed_after_close = eval_to_value(&mut plugin_test, r#"ws list"#);
+	let Value::List { vals: remaining, .. } = listed_after_close else {
+		panic!("ws list should return a list");
+	};
+	assert!(!remaining.iter().any(|value| record_string(value, "id") == session_name));
+}
+
+#[test]
+fn test_persistent_websocket_prunes_closed_sessions() {
+	let server = EarlyCloseServer::new();
+	server.start();
+
+	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let session_name = "session-prune-closed-test";
+
+	plugin_test
+		.eval(&format!(r#"ws open "{}" --name "{}""#, server.url(), session_name))
+		.expect("session should open");
+
+	let first_message = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"ws recv "{}" --max-time 2sec"#, session_name),
+	);
+	assert_eq!(
+		first_message.coerce_str().expect("first message should be text"),
+		"Closing soon"
+	);
+
+	let closed_error = plugin_test
+		.eval(&format!(r#"ws recv "{}" --max-time 2sec"#, session_name))
+		.expect_err("closed session should reject further reads");
+	let error_text = closed_error.to_string().to_lowercase();
+	assert!(
+		error_text.contains("closed") || error_text.contains("not found"),
+		"closed session errors should mention closure or pruning, got: {error_text}"
+	);
 
 	let listed_after_close = eval_to_value(&mut plugin_test, r#"ws list"#);
 	let Value::List { vals: remaining, .. } = listed_after_close else {

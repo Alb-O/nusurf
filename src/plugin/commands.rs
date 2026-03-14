@@ -2,7 +2,10 @@ use {
 	super::{
 		WebSocketPlugin,
 		convert::{json_to_nu_value, pipeline_input_to_bytes, pipeline_input_to_json, value_to_id_key},
-		registry::{SessionEntry, next_session_id, session_client, session_sort_key, session_value, sessions_mut},
+		registry::{
+			SessionEntry, next_session_id, prune_closed_sessions, session_client, session_sort_key, session_value,
+			sessions_mut,
+		},
 		shared::{init_logging, parse_timeout, raw_message_value, validate_ws_scheme},
 	},
 	crate::ws::client::{connect, connect_session, http_parse_url, request_headers},
@@ -483,7 +486,8 @@ impl PluginCommand for WebSocketList {
 	fn run(
 		&self, _plugin: &Self::Plugin, _engine: &EngineInterface, call: &EvaluatedCall, _input: PipelineData,
 	) -> Result<PipelineData, LabeledError> {
-		let sessions = sessions_mut()?;
+		let mut sessions = sessions_mut()?;
+		prune_closed_sessions(&mut sessions);
 		let mut values = sessions
 			.iter()
 			.map(|(id, entry)| session_value(id, &entry.url, call.head))

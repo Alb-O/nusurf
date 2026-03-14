@@ -1,2 +1,2 @@
 [files]
-extend-exclude = ["schema/cdp/*.json"]
+extend-exclude = ["schema/cdp/*.nuon"]

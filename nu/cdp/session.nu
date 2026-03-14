@@ -95,8 +95,8 @@ export def "cdp open" [
 }
 
 export def "cdp call" [
-    session: string@complete-cdp-session
-    method: string@complete-cdp-command
+    session: string
+    method: string
     params?: any
     --id: int
     --session-id(-s): string
@@ -146,8 +146,8 @@ export def "cdp call" [
 }
 
 export def "cdp event" [
-    session: string@complete-cdp-session
-    method?: string@complete-cdp-event
+    session: string
+    method?: string
     --session-id(-s): string
     --no-validate
     --max-time(-m): duration = 30sec
@@ -166,7 +166,7 @@ export def "cdp event" [
 }
 
 export def "cdp attach" [
-    session: string@complete-cdp-session
+    session: string
     target: any
     --flatten(-f) = true
     --max-time(-m): duration = 30sec
@@ -178,7 +178,7 @@ export def "cdp attach" [
 }
 
 export def "cdp detach" [
-    session: string@complete-cdp-session
+    session: string
     attached_session: any
     --max-time(-m): duration = 30sec
 ] {
@@ -187,6 +187,6 @@ export def "cdp detach" [
     } --max-time $max_time
 }
 
-export def "cdp close" [session: string@complete-cdp-session] {
+export def "cdp close" [session: string] {
     ws close $session
 }
