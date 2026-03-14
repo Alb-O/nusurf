@@ -6,6 +6,8 @@ use {
 pub(super) fn pipeline_input_to_bytes(
 	input: PipelineData, span: nu_protocol::Span, require_input: bool,
 ) -> Result<Option<Vec<u8>>, LabeledError> {
+	const INPUT_ERROR: &str = "Input must be string or binary";
+
 	match input {
 		PipelineData::Value(Value::String { val, .. }, ..) => Ok(Some(val.into_bytes())),
 		PipelineData::Value(Value::Binary { val, .. }, ..) => Ok(Some(val)),
@@ -14,10 +16,8 @@ pub(super) fn pipeline_input_to_bytes(
 			.map(Some)
 			.map_err(|e| LabeledError::new(e.to_string())),
 		PipelineData::Empty if !require_input => Ok(None),
-		PipelineData::Empty => {
-			Err(LabeledError::new("Input must be string or binary").with_label("Missing input", span))
-		}
-		_ => Err(LabeledError::new("Input must be string or binary").with_label("Unsupported input type", span)),
+		PipelineData::Empty => Err(LabeledError::new(INPUT_ERROR).with_label("Missing input", span)),
+		_ => Err(LabeledError::new(INPUT_ERROR).with_label("Unsupported input type", span)),
 	}
 }
 
@@ -46,8 +46,8 @@ pub(super) fn value_to_json(value: Value) -> Result<JsonValue, LabeledError> {
 		Value::String { val, .. } | Value::Glob { val, .. } => Ok(JsonValue::String(val)),
 		Value::Record { val, .. } => {
 			let mut object = JsonMap::new();
-			for (key, item) in val.iter() {
-				object.insert(key.to_string(), value_to_json(item.clone())?);
+			for (key, item) in val.into_owned() {
+				object.insert(key, value_to_json(item)?);
 			}
 			Ok(JsonValue::Object(object))
 		}

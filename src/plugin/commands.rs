@@ -91,12 +91,13 @@ impl PluginCommand for WebSocket {
 		let (_, requested_url) = http_parse_url(call, span, url).map_err(LabeledError::from)?;
 		validate_ws_scheme(&requested_url, span)?;
 		let timeout = parse_timeout(timeout)?;
+		let signals = engine.signals().clone();
 
 		if let Some((client, handle)) = connect(
 			requested_url,
 			timeout,
 			request_headers(headers).map_err(LabeledError::from)?,
-			engine.signals().clone(),
+			signals.clone(),
 			span,
 		) {
 			if let Some(data) = pipeline_input_to_bytes(input, span, false)? {
@@ -104,12 +105,7 @@ impl PluginCommand for WebSocket {
 			}
 
 			return Ok(PipelineData::ByteStream(
-				ByteStream::read(
-					Box::new(client),
-					span,
-					engine.signals().clone(),
-					ByteStreamType::Unknown,
-				),
+				ByteStream::read(Box::new(client), span, signals, ByteStreamType::Unknown),
 				None,
 			));
 		}
@@ -167,15 +163,10 @@ impl PluginCommand for WebSocketOpen {
 			return Err(LabeledError::new(format!("Session '{}' already exists", session_id)));
 		}
 
-		sessions.insert(
-			session_id.clone(),
-			SessionEntry {
-				url: url_text.clone(),
-				client,
-			},
-		);
+		let value = session_value(&session_id, &url_text, span);
+		sessions.insert(session_id.clone(), SessionEntry { url: url_text, client });
 
-		Ok(PipelineData::Value(session_value(&session_id, &url_text, span), None))
+		Ok(PipelineData::Value(value, None))
 	}
 }
 
@@ -244,8 +235,9 @@ impl PluginCommand for WebSocketRecv {
 		let full = call.has_flag("full")?;
 		let client = session_client(&session_id)?;
 		let timeout = parse_timeout(timeout)?;
+		let signals = engine.signals().clone();
 
-		let value = match client.recv_raw(timeout, &engine.signals().clone(), call.head) {
+		let value = match client.recv_raw(timeout, &signals, call.head) {
 			Ok(Some(message)) => raw_message_value(message, call.head, full),
 			Ok(None) => Value::nothing(call.head),
 			Err(err) => return Err(LabeledError::new(err)),
@@ -319,8 +311,9 @@ impl PluginCommand for WebSocketRecvJson {
 		let timeout: Option<Value> = call.get_flag("max-time")?;
 		let client = session_client(&session_id)?;
 		let timeout = parse_timeout(timeout)?;
+		let signals = engine.signals().clone();
 
-		let value = match client.recv_json(timeout, &engine.signals().clone(), call.head) {
+		let value = match client.recv_json(timeout, &signals, call.head) {
 			Ok(Some(json)) => json_to_nu_value(json, call.head),
 			Ok(None) => Value::nothing(call.head),
 			Err(err) => return Err(LabeledError::new(err)),
@@ -364,8 +357,9 @@ impl PluginCommand for WebSocketAwait {
 		let client = session_client(&session_id)?;
 		let timeout = parse_timeout(timeout)?;
 		let id_key = value_to_id_key(&id)?;
+		let signals = engine.signals().clone();
 
-		let value = match client.await_response(&id_key, timeout, &engine.signals().clone(), call.head) {
+		let value = match client.await_response(&id_key, timeout, &signals, call.head) {
 			Ok(Some(json)) => json_to_nu_value(json, call.head),
 			Ok(None) => Value::nothing(call.head),
 			Err(err) => return Err(LabeledError::new(err)),
@@ -415,12 +409,13 @@ impl PluginCommand for WebSocketNextEvent {
 		let timeout: Option<Value> = call.get_flag("max-time")?;
 		let client = session_client(&session_id)?;
 		let timeout = parse_timeout(timeout)?;
+		let signals = engine.signals().clone();
 
 		let value = match client.next_event(
 			method.as_deref(),
 			event_session_id.as_deref(),
 			timeout,
-			&engine.signals().clone(),
+			&signals,
 			call.head,
 		) {
 			Ok(Some(json)) => json_to_nu_value(json, call.head),

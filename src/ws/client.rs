@@ -91,17 +91,13 @@ enum ControlFlow {
 impl WebSocketClient {
 	/// Create a byte-stream adapter over a worker thread receiver.
 	pub fn new(rx: Receiver<ReceivedMessage>, timeout: Option<Duration>, signals: Signals, span: Span) -> Self {
-		let mut client = Self {
+		Self {
 			rx,
-			deadline: None,
+			deadline: timeout.map(|timeout| Instant::now() + timeout),
 			buf_deque: VecDeque::new(),
 			signals,
 			span,
-		};
-		if let Some(timeout) = timeout {
-			client.deadline = Some(Instant::now() + timeout);
 		}
-		client
 	}
 
 	fn enqueue_message(&mut self, message: ReceivedMessage) {
@@ -118,21 +114,25 @@ impl WebSocketClient {
 			}
 		}
 	}
+
+	fn drain_buffer(&mut self, buf: &mut [u8]) -> usize {
+		let mut len = 0;
+		for buf_slot in buf {
+			if let Some(byte) = self.buf_deque.pop_front() {
+				*buf_slot = byte;
+				len += 1;
+			} else {
+				break;
+			}
+		}
+		len
+	}
 }
 
 impl Read for WebSocketClient {
 	fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
 		if !self.buf_deque.is_empty() {
-			let mut len = 0;
-			for buf_slot in buf {
-				if let Some(b) = self.buf_deque.pop_front() {
-					*buf_slot = b;
-					len += 1;
-				} else {
-					break;
-				}
-			}
-			return Ok(len);
+			return Ok(self.drain_buffer(buf));
 		}
 
 		loop {
@@ -151,17 +151,7 @@ impl Read for WebSocketClient {
 			match self.rx.recv_timeout(wait_time) {
 				Ok(message) => {
 					self.enqueue_message(message);
-
-					let mut len = 0;
-					for buf_slot in buf {
-						if let Some(b) = self.buf_deque.pop_front() {
-							*buf_slot = b;
-							len += 1;
-						} else {
-							break;
-						}
-					}
-					return Ok(len);
+					return Ok(self.drain_buffer(buf));
 				}
 				Err(RecvTimeoutError::Timeout) => continue,
 				Err(RecvTimeoutError::Disconnected) => return Ok(0),
@@ -333,12 +323,10 @@ fn open_websocket(url: Url, headers: HashMap<String, String>) -> Option<WebSocke
 }
 
 fn websocket_origin(url: &Url) -> String {
-	let mut origin = format!("{}://{}", url.scheme(), url.host_str().unwrap_or_default());
-	if let Some(port) = url.port() {
-		origin.push(':');
-		origin.push_str(&port.to_string());
+	match url.port() {
+		Some(port) => format!("{}://{}:{}", url.scheme(), url.host_str().unwrap_or_default(), port),
+		None => format!("{}://{}", url.scheme(), url.host_str().unwrap_or_default()),
 	}
-	origin
 }
 
 fn connect_components(
@@ -542,7 +530,7 @@ fn enqueue_session_message(state: &SharedSessionState, message: ReceivedMessage)
 			if let Some(id) = json_id_key(&json) {
 				push_response(&mut queues, id, Arc::new(json));
 			} else if let Some(method) = json_method_key(&json) {
-				push_event(&mut queues, method, Arc::new(json));
+				push_event(&mut queues, method.to_owned(), Arc::new(json));
 			}
 		}
 
@@ -592,7 +580,7 @@ fn push_event(queues: &mut SessionQueues, method: String, event: RoutedJson) {
 		let Some(method) = json_method_key(old_event.as_ref()) else {
 			continue;
 		};
-		let empty = if let Some(queue) = queues.events_by_method.get_mut(&method) {
+		let empty = if let Some(queue) = queues.events_by_method.get_mut(method) {
 			remove_matching_event(queue, &old_event);
 			queue.is_empty()
 		} else {
@@ -600,7 +588,7 @@ fn push_event(queues: &mut SessionQueues, method: String, event: RoutedJson) {
 		};
 
 		if empty {
-			queues.events_by_method.remove(&method);
+			queues.events_by_method.remove(method);
 		}
 	}
 }
@@ -641,7 +629,7 @@ fn pop_event(queues: &mut SessionQueues, method: Option<&str>, session_id: Optio
 		None => {
 			let event = pop_matching_event(&mut queues.events_all, session_id)?;
 			let method = json_method_key(event.as_ref())?;
-			let empty_after_remove = if let Some(queue) = queues.events_by_method.get_mut(&method) {
+			let empty_after_remove = if let Some(queue) = queues.events_by_method.get_mut(method) {
 				remove_matching_event(queue, &event);
 				queue.is_empty()
 			} else {
@@ -649,7 +637,7 @@ fn pop_event(queues: &mut SessionQueues, method: Option<&str>, session_id: Optio
 			};
 
 			if empty_after_remove {
-				queues.events_by_method.remove(&method);
+				queues.events_by_method.remove(method);
 			}
 
 			Some(event.as_ref().clone())
@@ -662,7 +650,7 @@ fn pop_matching_event(queue: &mut VecDeque<RoutedJson>, session_id: Option<&str>
 		Some(session_id) => {
 			let index = queue
 				.iter()
-				.position(|event| json_session_id_key(event.as_ref()).as_deref() == Some(session_id))?;
+				.position(|event| json_session_id_key(event.as_ref()) == Some(session_id))?;
 			queue.remove(index)
 		}
 		None => queue.pop_front(),
@@ -694,12 +682,12 @@ fn json_id_key(value: &JsonValue) -> Option<String> {
 	}
 }
 
-fn json_method_key(value: &JsonValue) -> Option<String> {
-	value.get("method")?.as_str().map(str::to_string)
+fn json_method_key(value: &JsonValue) -> Option<&str> {
+	value.get("method")?.as_str()
 }
 
-fn json_session_id_key(value: &JsonValue) -> Option<String> {
-	value.get("sessionId")?.as_str().map(str::to_string)
+fn json_session_id_key(value: &JsonValue) -> Option<&str> {
+	value.get("sessionId")?.as_str()
 }
 
 fn configure_socket(websocket: &mut WebSocketStream) -> std::io::Result<()> {
@@ -720,9 +708,9 @@ fn set_read_timeout(stream: &mut MaybeTlsStream<TcpStream>, timeout: Option<Dura
 }
 
 fn send_message(data: Vec<u8>) -> Message {
-	match String::from_utf8(data.clone()) {
+	match String::from_utf8(data) {
 		Ok(text) => Message::Text(text.into()),
-		Err(_) => Message::Binary(data.into()),
+		Err(err) => Message::Binary(err.into_bytes().into()),
 	}
 }
 
@@ -758,58 +746,50 @@ pub fn http_parse_url(call: &EvaluatedCall, span: Span, raw_url: Value) -> Resul
 #[allow(clippy::result_large_err)]
 /// Normalize a Nushell record or single-row table into HTTP header pairs.
 pub fn request_headers(headers: Option<Value>) -> Result<HashMap<String, String>, ShellError> {
-	let mut custom_headers: HashMap<String, Value> = HashMap::new();
-
-	if let Some(headers) = headers {
-		match &headers {
-			Value::Record { val, .. } => {
-				for (k, v) in &**val {
-					custom_headers.insert(k.to_string(), v.clone());
-				}
-			}
-			Value::List { vals: table, .. } => {
-				if table.len() == 1 {
-					match &table[0] {
-						Value::Record { val, .. } => {
-							for (k, v) in &**val {
-								custom_headers.insert(k.to_string(), v.clone());
-							}
-						}
-						x => {
-							return Err(ShellError::CantConvert {
-								to_type: "string list or single row".into(),
-								from_type: x.get_type().to_string(),
-								span: headers.span(),
-								help: None,
-							});
-						}
-					}
-				} else {
-					for row in table.chunks(2) {
-						if row.len() == 2 {
-							custom_headers.insert(row[0].coerce_string()?, row[1].clone());
-						}
-					}
-				}
-			}
-			x => {
-				return Err(ShellError::CantConvert {
-					to_type: "string list or single row".into(),
-					from_type: x.get_type().to_string(),
-					span: headers.span(),
-					help: None,
-				});
-			}
-		};
-	}
-
 	let mut result = HashMap::new();
-	for (k, v) in custom_headers {
-		if let Ok(s) = v.coerce_into_string() {
-			result.insert(k, s);
+	let Some(headers) = headers else {
+		return Ok(result);
+	};
+	let span = headers.span();
+
+	match &headers {
+		Value::Record { val, .. } => insert_record_headers(&mut result, val),
+		Value::List { vals, .. } if vals.len() == 1 => match &vals[0] {
+			Value::Record { val, .. } => insert_record_headers(&mut result, val),
+			value => return Err(header_convert_error(value, span)),
+		},
+		Value::List { vals, .. } => {
+			for row in vals.chunks(2) {
+				if row.len() == 2 {
+					insert_header(&mut result, row[0].coerce_string()?, &row[1]);
+				}
+			}
 		}
+		value => return Err(header_convert_error(value, span)),
 	}
+
 	Ok(result)
+}
+
+fn insert_record_headers(result: &mut HashMap<String, String>, record: &nu_protocol::Record) {
+	for (key, value) in record.iter() {
+		insert_header(result, key.to_owned(), value);
+	}
+}
+
+fn insert_header(result: &mut HashMap<String, String>, key: String, value: &Value) {
+	if let Ok(value) = value.coerce_str() {
+		result.insert(key, value.into_owned());
+	}
+}
+
+fn header_convert_error(value: &Value, span: Span) -> ShellError {
+	ShellError::CantConvert {
+		to_type: "string list or single row".into(),
+		from_type: value.get_type().to_string(),
+		span,
+		help: None,
+	}
 }
 
 #[cfg(test)]
