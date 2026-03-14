@@ -19,7 +19,7 @@ def main [http_port: int] {
         let next_event = (
             try {
                 cdp event $page.session --max-time 250ms
-            } catch {
+            } catch {|err|
                 let message = ($err.msg | str downcase)
 
                 if (($message | str contains "not found") or ($message | str contains "closed")) {
@@ -48,7 +48,7 @@ def main [http_port: int] {
             } | ignore
 
             ""
-        } catch {
+        } catch {|err|
             $err.msg
         }
     )
@@ -65,7 +65,7 @@ def main [http_port: int] {
 
     try {
         cdp close $page.session | ignore
-    } catch {
+    } catch {|err|
         let message = ($err.msg | str downcase)
 
         if not (($message | str contains "not found") or ($message | str contains "closed")) {
