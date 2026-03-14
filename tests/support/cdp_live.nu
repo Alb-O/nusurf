@@ -82,6 +82,14 @@ export def "create-attached-page" [browser_session: string, name: string] {
     }
 }
 
+export def "close-browser" [browser_session: string] {
+    try {
+        cdp close $browser_session | ignore
+    } catch {
+        null
+    }
+}
+
 export def "close-page" [browser_session: string, page_session: string, target_id: string] {
     try {
         cdp call $browser_session "Target.closeTarget" { targetId: $target_id } | ignore
