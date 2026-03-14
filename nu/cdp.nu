@@ -127,6 +127,108 @@ def resolve-session-id [session: any] {
     }
 }
 
+def command-path [name: string] {
+    let hit = (which $name | get -o 0.path)
+
+    if (is-nothing $hit) {
+        null
+    } else {
+        $hit | path expand
+    }
+}
+
+def resolve-browser-path [candidate: string] {
+    let expanded = ($candidate | path expand)
+
+    if ($expanded | path exists) {
+        return $expanded
+    }
+
+    command-path $candidate
+}
+
+def browser-env-candidate [name: string] {
+    let raw = ($env | get -o $name)
+
+    if (is-nothing $raw) {
+        return null
+    }
+
+    let raw_text = ($raw | into string | str trim)
+    let direct = (resolve-browser-path $raw_text)
+
+    if (not (is-nothing $direct)) {
+        return $direct
+    }
+
+    let first = (
+        $raw_text
+        | split row ":"
+        | get -o 0
+        | str trim
+        | split row " "
+        | get -o 0
+    )
+
+    if (is-nothing $first) {
+        null
+    } else {
+        resolve-browser-path $first
+    }
+}
+
+def chromium-browser-candidates [] {
+    mut candidates = [
+        "google-chrome"
+        "google-chrome-stable"
+        "chromium"
+        "chromium-browser"
+        "chrome"
+        "brave-browser"
+        "microsoft-edge"
+        "microsoft-edge-stable"
+        "vivaldi"
+        "vivaldi-stable"
+        "opera"
+        "helium"
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
+        "/Applications/Chromium.app/Contents/MacOS/Chromium"
+    ]
+
+    for base in [
+        ($env | get -o ProgramFiles)
+        ($env | get -o 'ProgramFiles(x86)')
+    ] {
+        if (not (is-nothing $base)) {
+            $candidates = ($candidates | append $"($base)/Google/Chrome/Application/chrome.exe")
+            $candidates = ($candidates | append $"($base)/Microsoft/Edge/Application/msedge.exe")
+        }
+    }
+
+    $candidates
+}
+
+def discover-browser-path [] {
+    for candidate in [
+        (browser-env-candidate "NU_CDP_BROWSER")
+        (browser-env-candidate "BROWSER")
+    ] {
+        if (not (is-nothing $candidate)) {
+            return $candidate
+        }
+    }
+
+    for candidate in (chromium-browser-candidates) {
+        let path = (resolve-browser-path $candidate)
+        if (not (is-nothing $path)) {
+            return $path
+        }
+    }
+
+    null
+}
+
 def next-event-once [session: string, method: any, timeout: duration] {
     if (is-nothing $method) {
         ws next-event $session --max-time $timeout
@@ -137,6 +239,66 @@ def next-event-once [session: string, method: any, timeout: duration] {
 
 export def "cdp discover" [target: any] {
     resolve-ws-url $target
+}
+
+export def "cdp browser find" [
+    --browser(-b): string
+] {
+    let path = if (is-nothing $browser) {
+        discover-browser-path
+    } else {
+        resolve-browser-path $browser
+    }
+
+    if (is-nothing $path) {
+        error make {
+            msg: "No Chromium-compatible browser was found. Set NU_CDP_BROWSER or BROWSER, or install a supported browser on PATH."
+        }
+    }
+
+    $path
+}
+
+export def "cdp browser args" [
+    --port(-p): int = 9222
+    --headless(-h)
+    --user-data-dir(-u): string
+    --url: string
+] {
+    mut args = [
+        $"--remote-debugging-port=($port)"
+        "--remote-allow-origins=*"
+        "--no-first-run"
+        "--no-default-browser-check"
+        "--disable-background-networking"
+        "--disable-backgrounding-occluded-windows"
+        "--disable-component-update"
+        "--disable-default-apps"
+        "--disable-hang-monitor"
+        "--disable-popup-blocking"
+        "--disable-prompt-on-repost"
+        "--disable-sync"
+        "--disable-blink-features=AutomationControlled" # Otherwise can trigger bot detection
+        "--disable-features=Translate"
+        "--enable-features=NetworkService,NetworkServiceInProcess"
+        "--metrics-recording-only"
+        "--password-store=basic"
+        "--use-mock-keychain"
+    ]
+
+    if $headless {
+        $args = ($args | append "--headless=new")
+    }
+
+    if (not (is-nothing $user_data_dir)) {
+        $args = ($args | append $"--user-data-dir=($user_data_dir)")
+    }
+
+    if (not (is-nothing $url)) {
+        $args = ($args | append $url)
+    }
+
+    $args
 }
 
 export def "cdp open" [
