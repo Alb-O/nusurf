@@ -49,6 +49,10 @@ in
       cargo build
     '';
 
+    update-cdp-schema.exec = ''
+      ${standaloneProjectRoot}/scripts/update-cdp-schema.sh
+    '';
+
     check-targets.exec = lib.mkForce ''
       cargo check --workspace --all-targets --all-features
     '';

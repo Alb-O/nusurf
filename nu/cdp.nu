@@ -1,3 +1,8 @@
+const cdp_schema_files = [
+    (path self ../schema/cdp/browser_protocol.json)
+    (path self ../schema/cdp/js_protocol.json)
+]
+
 def is-nothing [value: any] {
     ($value | describe) == "nothing"
 }
@@ -127,6 +132,108 @@ def resolve-session-id [session: any] {
     }
 }
 
+def schema-domains-raw [] {
+    $cdp_schema_files
+    | each {|path|
+        open $path | get domains
+    }
+    | flatten
+}
+
+def schema-domains [domain?: string] {
+    let domains = (schema-domains-raw)
+
+    if (is-nothing $domain) {
+        $domains
+    } else {
+        $domains | where domain == $domain
+    }
+}
+
+def enrich-command [domain_name: string, command: record] {
+    $command
+    | upsert domain $domain_name
+    | upsert qualified $"($domain_name).($command.name)"
+}
+
+def enrich-event [domain_name: string, event: record] {
+    $event
+    | upsert domain $domain_name
+    | upsert qualified $"($domain_name).($event.name)"
+}
+
+def enrich-type [domain_name: string, type_def: record] {
+    $type_def
+    | upsert domain $domain_name
+    | upsert qualified $"($domain_name).($type_def.id)"
+}
+
+def schema-commands [domain?: string] {
+    schema-domains $domain
+    | each {|domain_record|
+        let domain_name = $domain_record.domain
+        ($domain_record | get -o commands | default [])
+        | each {|command| enrich-command $domain_name $command }
+    }
+    | flatten
+}
+
+def schema-events [domain?: string] {
+    schema-domains $domain
+    | each {|domain_record|
+        let domain_name = $domain_record.domain
+        ($domain_record | get -o events | default [])
+        | each {|event| enrich-event $domain_name $event }
+    }
+    | flatten
+}
+
+def schema-types [domain?: string] {
+    schema-domains $domain
+    | each {|domain_record|
+        let domain_name = $domain_record.domain
+        ($domain_record | get -o types | default [])
+        | each {|type_def| enrich-type $domain_name $type_def }
+    }
+    | flatten
+}
+
+def parse-qualified [qualified: string] {
+    let parts = ($qualified | split row ".")
+
+    if (($parts | length) != 2) {
+        error make {
+            msg: $"Expected a qualified CDP name like Domain.member, got: ($qualified)"
+        }
+    }
+
+    {
+        domain: ($parts | get 0)
+        member: ($parts | get 1)
+    }
+}
+
+def schema-lookup [kind: string, qualified: string] {
+    let parsed = (parse-qualified $qualified)
+
+    let entries = match $kind {
+        "command" => (schema-commands $parsed.domain)
+        "event" => (schema-events $parsed.domain)
+        "type" => (schema-types $parsed.domain)
+        _ => (error make { msg: $"Unsupported CDP schema lookup kind: ($kind)" })
+    }
+
+    let entry = ($entries | where qualified == $qualified | get -o 0)
+
+    if (is-nothing $entry) {
+        error make {
+            msg: $"No CDP ($kind) named ($qualified)"
+        }
+    }
+
+    $entry
+}
+
 def command-path [name: string] {
     let hit = (which $name | get -o 0.path)
 
@@ -239,6 +346,52 @@ def next-event-once [session: string, method: any, timeout: duration] {
 
 export def "cdp discover" [target: any] {
     resolve-ws-url $target
+}
+
+export def "cdp schema domains" [] {
+    schema-domains
+    | each {|domain_record|
+        $domain_record
+        | upsert commands (($domain_record | get -o commands | default [] | length))
+        | upsert events (($domain_record | get -o events | default [] | length))
+        | upsert types (($domain_record | get -o types | default [] | length))
+    }
+}
+
+export def "cdp schema commands" [
+    domain?: string
+] {
+    schema-commands $domain
+}
+
+export def "cdp schema events" [
+    domain?: string
+] {
+    schema-events $domain
+}
+
+export def "cdp schema types" [
+    domain?: string
+] {
+    schema-types $domain
+}
+
+export def "cdp schema command" [
+    qualified: string
+] {
+    schema-lookup "command" $qualified
+}
+
+export def "cdp schema event" [
+    qualified: string
+] {
+    schema-lookup "event" $qualified
+}
+
+export def "cdp schema type" [
+    qualified: string
+] {
+    schema-lookup "type" $qualified
 }
 
 export def "cdp browser find" [

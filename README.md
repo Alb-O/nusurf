@@ -64,3 +64,17 @@ ws next-event cdp "Target.attachedToTarget" --max-time 2sec
 ```
 
 `ws recv` exposes the raw message stream. `ws recv-json`, `ws await`, and `ws next-event` sit on top of the same session and separate JSON responses from async events.
+
+## Development
+
+Refresh the vendored CDP schema with:
+
+```bash
+./scripts/update-cdp-schema.sh
+```
+
+Or inside the repo's pinned environment:
+
+```bash
+devenv-run -C . update-cdp-schema
+```

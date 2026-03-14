@@ -179,3 +179,29 @@ fn cdp_module_runs_against_mock_server() {
 		String::from_utf8_lossy(&output.stderr)
 	);
 }
+
+#[test]
+fn cdp_schema_introspection_works() {
+	let plugin_path = build_plugin_binary();
+	let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+	let script_path = repo_root.join("tests/cdp/schema.nu");
+	let include_path = repo_root.join("nu");
+
+	let output = Command::new("nu")
+		.arg("--no-config-file")
+		.arg("-I")
+		.arg(include_path)
+		.arg("--plugins")
+		.arg(plugin_path)
+		.arg("--")
+		.arg(script_path)
+		.output()
+		.expect("should execute nushell");
+
+	assert!(
+		output.status.success(),
+		"cdp schema tests failed\nstdout:\n{}\nstderr:\n{}",
+		String::from_utf8_lossy(&output.stdout),
+		String::from_utf8_lossy(&output.stderr)
+	);
+}
