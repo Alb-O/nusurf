@@ -93,12 +93,10 @@ def browser-env-candidate [name: string] {
             | get -o 0
         )
     ]
-    | where {|candidate|
-        ($candidate != null) and (not (($candidate | into string) | is-empty))
-    }
+    | compact --empty
     | each {|candidate| resolve-path-candidate $candidate }
-    | where {|candidate| $candidate != null }
-    | get -o 0
+    | compact
+    | first
 }
 
 def chromium-browser-candidates [] {
@@ -140,7 +138,7 @@ def discover-browser-path [] {
             (browser-env-candidate "BROWSER")
         ]
         | compact
-        | get -o 0
+        | first
     )
 
     if $env_candidate != null {
@@ -150,7 +148,7 @@ def discover-browser-path [] {
     chromium-browser-candidates
     | each {|candidate| resolve-path-candidate $candidate }
     | compact
-    | get -o 0
+    | first
 }
 
 # Resolve a CDP discovery target to its websocket URL.

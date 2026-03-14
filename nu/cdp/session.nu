@@ -43,8 +43,8 @@ def resolve-target-id [target: any] {
         let target_id = (
             $target
             | get -o targetId id
-            | where {|value| $value != null }
-            | get -o 0
+            | compact
+            | first
         )
 
         if $target_id != null {
@@ -68,8 +68,8 @@ def resolve-session-id [session: any] {
         let session_id = (
             $session
             | get -o sessionId
-            | where {|value| $value != null }
-            | get -o 0
+            | compact
+            | first
         )
 
         if $session_id != null {
@@ -118,9 +118,10 @@ export def "cdp call" [
         {
             id: $request_id
             method: $method
+            params: $params
+            sessionId: $session_id
         }
-        | merge (if $params == null { {} } else { {params: $params} })
-        | merge (if $session_id == null { {} } else { {sessionId: $session_id} })
+        | compact
     )
 
     $command | ws send-json $session
