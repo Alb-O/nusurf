@@ -50,7 +50,7 @@ in
     '';
 
     update-cdp-schema.exec = ''
-      ${standaloneProjectRoot}/scripts/update-cdp-schema.sh
+      nu ${standaloneProjectRoot}/scripts/update-cdp-schema.nu
     '';
 
     check-targets.exec = lib.mkForce ''

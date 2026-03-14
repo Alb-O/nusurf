@@ -70,7 +70,7 @@ ws next-event cdp "Target.attachedToTarget" --max-time 2sec
 Refresh the vendored CDP schema with:
 
 ```bash
-./scripts/update-cdp-schema.sh
+nu ./scripts/update-cdp-schema.nu
 ```
 
 Or inside the repo's pinned environment:
