@@ -22,4 +22,13 @@ def main [] {
     assert equal $session_type.domain "Target"
     assert equal $session_type.id "SessionID"
     assert equal $session_type.type "string"
+
+    let command_matches = (cdp schema search commands "evalu")
+    assert (($command_matches | where qualified == "Runtime.evaluate" | length) == 1)
+
+    let event_matches = (cdp schema search events "load")
+    assert (($event_matches | where qualified == "Page.loadEventFired" | length) == 1)
+
+    let all_matches = (cdp schema search "session")
+    assert (($all_matches | where qualified == "Target.SessionID" and kind == "type" | length) == 1)
 }

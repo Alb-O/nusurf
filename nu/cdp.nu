@@ -234,6 +234,100 @@ def schema-lookup [kind: string, qualified: string] {
     $entry
 }
 
+def entry-member [entry: record] {
+    let name = ($entry | get -o name)
+
+    if (is-nothing $name) {
+        $entry | get id
+    } else {
+        $name
+    }
+}
+
+def enrich-search-entry [kind: string, entry: record] {
+    $entry
+    | upsert kind $kind
+    | upsert member (entry-member $entry)
+}
+
+def schema-search-kind [kind: string, query: string] {
+    let needle = ($query | str downcase)
+
+    let entries = match $kind {
+        "command" => (schema-commands)
+        "event" => (schema-events)
+        "type" => (schema-types)
+        _ => (error make { msg: $"Unsupported CDP schema search kind: ($kind)" })
+    }
+
+    $entries
+    | each {|entry| enrich-search-entry $kind $entry }
+    | where {|entry|
+        let qualified = ($entry.qualified | str downcase)
+        let member = ($entry.member | into string | str downcase)
+        let description = ($entry | get -o description | default "" | into string | str downcase)
+
+        (($qualified | str contains $needle)
+            or ($member | str contains $needle)
+            or ($description | str contains $needle))
+    }
+}
+
+def schema-command-parameter-names [command: record] {
+    ($command | get -o parameters | default [])
+    | each {|parameter| $parameter.name }
+}
+
+def schema-command-required-parameter-names [command: record] {
+    ($command | get -o parameters | default [])
+    | where {|parameter| (($parameter | get -o optional) | default false) == false }
+    | each {|parameter| $parameter.name }
+}
+
+def validate-command-params [method: string, params: any, command: record] {
+    let allowed = (schema-command-parameter-names $command)
+    let required = (schema-command-required-parameter-names $command)
+
+    let param_record = if (is-nothing $params) {
+        {}
+    } else {
+        let param_type = ($params | describe)
+
+        if (not ($param_type | str starts-with "record")) {
+            error make {
+                msg: $"CDP command ($method) params must be a record, got: ($param_type)"
+            }
+        }
+
+        $params
+    }
+
+    let keys = ($param_record | columns)
+    let unknown = ($keys | where {|name| not ($allowed | any {|allowed_name| $allowed_name == $name }) })
+    let missing = ($required | where {|name| not ($keys | any {|param_name| $param_name == $name }) })
+
+    if (($unknown | length) > 0) {
+        error make {
+            msg: $"Unknown CDP params for ($method): (($unknown | str join ', '))"
+        }
+    }
+
+    if (($missing | length) > 0) {
+        error make {
+            msg: $"Missing required CDP params for ($method): (($missing | str join ', '))"
+        }
+    }
+}
+
+def validate-command-input [method: string, params: any] {
+    let command = (schema-lookup "command" $method)
+    validate-command-params $method $params $command
+}
+
+def validate-event-input [method: string] {
+    schema-lookup "event" $method | ignore
+}
+
 def command-path [name: string] {
     let hit = (which $name | get -o 0.path)
 
@@ -394,6 +488,35 @@ export def "cdp schema type" [
     schema-lookup "type" $qualified
 }
 
+export def "cdp schema search" [
+    query: string
+] {
+    [
+        (schema-search-kind "command" $query)
+        (schema-search-kind "event" $query)
+        (schema-search-kind "type" $query)
+    ]
+    | flatten
+}
+
+export def "cdp schema search commands" [
+    query: string
+] {
+    schema-search-kind "command" $query
+}
+
+export def "cdp schema search events" [
+    query: string
+] {
+    schema-search-kind "event" $query
+}
+
+export def "cdp schema search types" [
+    query: string
+] {
+    schema-search-kind "type" $query
+}
+
 export def "cdp browser find" [
     --browser(-b): string
 ] {
@@ -474,8 +597,13 @@ export def "cdp call" [
     params?: any
     --id: int
     --session-id(-s): string
+    --no-validate
     --max-time(-m): duration = 30sec
 ] {
+    if (not $no_validate) {
+        validate-command-input $method $params
+    }
+
     let request_id = if (is-nothing $id) { random-id } else { $id }
 
     mut command = {
@@ -518,8 +646,13 @@ export def "cdp event" [
     session: string
     method?: string
     --session-id(-s): string
+    --no-validate
     --max-time(-m): duration = 30sec
 ] {
+    if ((not $no_validate) and (not (is-nothing $method))) {
+        validate-event-input $method
+    }
+
     if (is-nothing $session_id) {
         next-event-once $session $method $max_time
     } else {
