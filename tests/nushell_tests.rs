@@ -1,10 +1,6 @@
-#[cfg(unix)]
-use std::os::unix::fs::symlink;
-
 use {
 	serde_json::{Value as JsonValue, json},
 	std::{
-		fs,
 		net::{SocketAddr, TcpListener, TcpStream},
 		path::PathBuf,
 		process::Command,
@@ -117,22 +113,12 @@ fn nushell_ws_tests_pass() {
 	let server = MockCdpServer::new();
 	server.start();
 
-	let plugin_path = PathBuf::from(env!("CARGO_BIN_EXE_nu-plugin-ws"));
+	let plugin_path = PathBuf::from(env!("CARGO_BIN_EXE_nu_plugin_ws"));
 	let script_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/ws_tests.nu");
-	let plugin_link_dir = std::env::temp_dir().join(format!("nu-plugin-ws-tests-{}", std::process::id()));
-	fs::create_dir_all(&plugin_link_dir).expect("should create plugin link directory");
-	let plugin_link_path = plugin_link_dir.join("nu_plugin_ws");
-
-	#[cfg(unix)]
-	{
-		let _ = fs::remove_file(&plugin_link_path);
-		symlink(&plugin_path, &plugin_link_path).expect("should create plugin symlink");
-	}
-
 	let output = Command::new("nu")
 		.arg("--no-config-file")
 		.arg("--plugins")
-		.arg(&plugin_link_path)
+		.arg(&plugin_path)
 		.arg("--")
 		.arg(script_path)
 		.arg(server.url())

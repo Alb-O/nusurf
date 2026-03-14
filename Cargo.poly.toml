@@ -7,6 +7,11 @@ name = "nu-plugin-ws"
 description = "A Nushell plugin for easily streaming output from websocket endpoints"
 version = "1.0.6"
 edition = "2024"
+autobins = false
+
+[[bin]]
+name = "nu_plugin_ws"
+path = "src/main.rs"
 
 [dependencies]
 env_logger = true

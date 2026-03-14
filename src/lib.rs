@@ -4,5 +4,5 @@ mod plugin;
 /// WebSocket transport primitives and session clients used by the plugin.
 pub mod ws;
 
-/// The plugin entrypoint registered by `nu-plugin-ws`.
+/// The plugin entrypoint registered by `nu_plugin_ws`.
 pub use plugin::WebSocketPlugin;
