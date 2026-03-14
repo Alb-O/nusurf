@@ -37,7 +37,10 @@ def http-ws-url [target: any] {
     ws-url-from-version-info $target (http get (json-version-url $target))
 }
 
-export def resolve-ws-url [target: any] {
+# Resolve an HTTP discovery target, websocket URL, or version record to a CDP websocket URL.
+export def resolve-ws-url [
+    target: any # Browser port, discovery URL, websocket URL, or version record.
+] {
     let target_type = ($target | describe)
 
     if $target_type == "int" {
@@ -49,7 +52,11 @@ export def resolve-ws-url [target: any] {
             return $target
         }
 
-        if (($target | str starts-with "http://") or ($target | str starts-with "https://") or ($target | str ends-with "/json/version")) {
+        if (
+            ($target | str starts-with "http://")
+            or ($target | str starts-with "https://")
+            or ($target | str ends-with "/json/version")
+        ) {
             return (http-ws-url $target)
         }
     }
@@ -147,12 +154,16 @@ def discover-browser-path [] {
     | get -o 0
 }
 
-export def "cdp discover" [target: any] {
+# Resolve a CDP discovery target to its websocket URL.
+export def "cdp discover" [
+    target: any # Browser port, discovery URL, websocket URL, or version record.
+] {
     resolve-ws-url $target
 }
 
+# Find a Chromium-compatible browser executable.
 export def "cdp browser find" [
-    --browser(-b): string
+    --browser(-b): string # Explicit browser path or command name to resolve.
 ] {
     let path = if (is-nothing $browser) {
         discover-browser-path
@@ -162,18 +173,23 @@ export def "cdp browser find" [
 
     if (is-nothing $path) {
         error make {
-            msg: "No Chromium-compatible browser was found. Set NU_CDP_BROWSER or BROWSER, or install a supported browser on PATH."
+            msg: (
+                "No Chromium-compatible browser was found. "
+                + "Set NU_CDP_BROWSER or BROWSER, "
+                + "or install a supported browser on PATH."
+            )
         }
     }
 
     $path
 }
 
+# Build Chromium launch args with remote debugging enabled.
 export def "cdp browser args" [
-    --port(-p): int = 9222
-    --headless(-h)
-    --user-data-dir(-u): string
-    --url: string
+    --port(-p): int = 9222 # Remote debugging port to expose.
+    --headless(-h) # Launch Chromium in headless mode.
+    --user-data-dir(-u): string # Browser profile directory to use.
+    --url: string # Initial URL to open after launch.
 ] {
     mut args = [
         $"--remote-debugging-port=($port)"

@@ -16,8 +16,16 @@ def main [http_port: int, fixture_port: int] {
                     cdp call "browser-attached" "Page.enable" --session-id $attached | ignore
                     cdp call "browser-attached" "Runtime.enable" --session-id $attached | ignore
                     cdp call "browser-attached" "Network.enable" --session-id $attached | ignore
-                    cdp call "browser-attached" "Page.navigate" { url: "about:blank" } --session-id $attached | ignore
-                    let load = (cdp event "browser-attached" "Page.loadEventFired" --session-id $attached --max-time 5sec)
+                    cdp call "browser-attached" "Page.navigate" {
+                        url: "about:blank"
+                    } --session-id (
+                        $attached
+                    ) | ignore
+                    let load = (
+                        cdp event "browser-attached" "Page.loadEventFired" --session-id (
+                            $attached
+                        ) --max-time 5sec
+                    )
                     assert some $load $"Timed out waiting for attached load event on ($attached)"
                     drain-events "browser-attached" --max-time 25ms
                 }
@@ -59,12 +67,36 @@ def main [http_port: int, fixture_port: int] {
                     returnByValue: true
                 } --session-id $page_b.attachedSessionId | ignore
 
-                let console_a = (cdp event "browser-attached" "Runtime.consoleAPICalled" --session-id $page_a.attachedSessionId --max-time 5sec)
-                let console_b = (cdp event "browser-attached" "Runtime.consoleAPICalled" --session-id $page_b.attachedSessionId --max-time 5sec)
-                let request_a = (cdp event "browser-attached" "Network.requestWillBeSent" --session-id $page_a.attachedSessionId --max-time 5sec)
-                let request_b = (cdp event "browser-attached" "Network.requestWillBeSent" --session-id $page_b.attachedSessionId --max-time 5sec)
-                let failed_a = (cdp event "browser-attached" "Network.loadingFailed" --session-id $page_a.attachedSessionId --max-time 5sec)
-                let failed_b = (cdp event "browser-attached" "Network.loadingFailed" --session-id $page_b.attachedSessionId --max-time 5sec)
+                let console_a = (
+                    cdp event "browser-attached" "Runtime.consoleAPICalled" --session-id (
+                        $page_a.attachedSessionId
+                    ) --max-time 5sec
+                )
+                let console_b = (
+                    cdp event "browser-attached" "Runtime.consoleAPICalled" --session-id (
+                        $page_b.attachedSessionId
+                    ) --max-time 5sec
+                )
+                let request_a = (
+                    cdp event "browser-attached" "Network.requestWillBeSent" --session-id (
+                        $page_a.attachedSessionId
+                    ) --max-time 5sec
+                )
+                let request_b = (
+                    cdp event "browser-attached" "Network.requestWillBeSent" --session-id (
+                        $page_b.attachedSessionId
+                    ) --max-time 5sec
+                )
+                let failed_a = (
+                    cdp event "browser-attached" "Network.loadingFailed" --session-id (
+                        $page_a.attachedSessionId
+                    ) --max-time 5sec
+                )
+                let failed_b = (
+                    cdp event "browser-attached" "Network.loadingFailed" --session-id (
+                        $page_b.attachedSessionId
+                    ) --max-time 5sec
+                )
 
                 assert equal ($console_a.params.args | get 0.value) "attached-console-a"
                 assert equal ($console_b.params.args | get 0.value) "attached-console-b"
@@ -75,14 +107,22 @@ def main [http_port: int, fixture_port: int] {
 
                 let state_a = (
                     cdp call "browser-attached" "Runtime.evaluate" {
-                        expression: "new Promise(resolve => setTimeout(() => resolve({ title: document.title, text: document.querySelector(`#app`).textContent }), 200))"
+                        expression: (
+                            "new Promise(resolve => setTimeout(() => "
+                            + "resolve({ title: document.title, "
+                            + "text: document.querySelector(`#app`).textContent }), 200))"
+                        )
                         awaitPromise: true
                         returnByValue: true
                     } --session-id $page_a.attachedSessionId
                 )
                 let state_b = (
                     cdp call "browser-attached" "Runtime.evaluate" {
-                        expression: "new Promise(resolve => setTimeout(() => resolve({ title: document.title, text: document.querySelector(`#app`).textContent }), 200))"
+                        expression: (
+                            "new Promise(resolve => setTimeout(() => "
+                            + "resolve({ title: document.title, "
+                            + "text: document.querySelector(`#app`).textContent }), 200))"
+                        )
                         awaitPromise: true
                         returnByValue: true
                     } --session-id $page_b.attachedSessionId
@@ -94,7 +134,9 @@ def main [http_port: int, fixture_port: int] {
                 assert equal $state_b.result.value.text "ready-b"
 
                 let metrics_a = (
-                    cdp call "browser-attached" "Page.getLayoutMetrics" {} --session-id $page_a.attachedSessionId
+                    cdp call "browser-attached" "Page.getLayoutMetrics" {} --session-id (
+                        $page_a.attachedSessionId
+                    )
                 )
                 let pdf_b = (
                     cdp call "browser-attached" "Page.printToPDF" {
@@ -104,7 +146,9 @@ def main [http_port: int, fixture_port: int] {
                     } --session-id $page_b.attachedSessionId --max-time 60sec
                 )
 
-                assert ($metrics_a.cssContentSize.width > 0) "expected attached-session layout metrics"
+                assert (
+                    $metrics_a.cssContentSize.width > 0
+                ) "expected attached-session layout metrics"
                 assert (($pdf_b.data | str length) > 1000) "expected attached-session PDF payload"
             } finally {
                 close-attached-page "browser-attached" $page_b.attachedSessionId $page_b.targetId

@@ -28,7 +28,9 @@ def "test cdp call and event" [http_port: int] {
     assert equal $result.echoMethod "Runtime.evaluate"
     assert equal $result.echoParams.expression "'nu-plugin-ws'"
 
-    let event = (cdp event $session "Test.event" --session-id "session-41" --no-validate --max-time 2sec)
+    let event = (
+        cdp event $session "Test.event" --session-id "session-41" --no-validate --max-time 2sec
+    )
     assert equal $event.method "Test.event"
     assert equal $event.sessionId "session-41"
     assert equal $event.params.requestId 41
@@ -54,7 +56,10 @@ def "test cdp schema validation" [http_port: int] {
             $err.msg
         }
     )
-    assert ($missing_param_error | str contains "Missing required CDP params for Runtime.evaluate: expression")
+    assert (
+        $missing_param_error
+        | str contains "Missing required CDP params for Runtime.evaluate: expression"
+    )
 
     let unknown_param_error = (
         try {
@@ -76,7 +81,11 @@ def "test cdp schema validation" [http_port: int] {
     )
     assert ($unknown_event_error | str contains "No CDP event named Missing.event")
 
-    let unvalidated = (cdp call $session "Missing.method" {foo: "bar"} --no-validate --id 53 --session-id "session-53")
+    let unvalidated = (
+        cdp call $session "Missing.method" {foo: "bar"} --no-validate --id 53 --session-id (
+            "session-53"
+        )
+    )
     assert equal $unvalidated.echoMethod "Missing.method"
     assert equal $unvalidated.echoParams.foo "bar"
 
@@ -91,7 +100,13 @@ def "test cdp session completion" [http_port: int] {
 
     let completions = (complete-cdp-session "cdp call bro")
     assert (($completions.completions | where value == "browser" | length) == 1)
-    assert (($completions.completions | where value == "browser" and description =~ "ws://127.0.0.1:" | length) == 1)
+    assert (
+        (
+            $completions.completions
+            | where value == "browser" and description =~ "ws://127.0.0.1:"
+            | length
+        ) == 1
+    )
 
     cdp close $session | ignore
 }

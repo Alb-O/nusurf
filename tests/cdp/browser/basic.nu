@@ -38,7 +38,9 @@ def main [http_port: int] {
             let screenshot = (
                 cdp call $page.session "Page.captureScreenshot" { format: "png" } --max-time 60sec
             )
-            assert (($screenshot.data | str length) > 1000) "expected a non-trivial screenshot payload"
+            assert (
+                ($screenshot.data | str length) > 1000
+            ) "expected a non-trivial screenshot payload"
         } finally {
             close-page "browser-e2e" $page.session $page.targetId
         }

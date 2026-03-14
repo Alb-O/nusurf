@@ -2,11 +2,15 @@ use common.nu *
 
 const cdp_schema_file = (path self ../../schema/cdp/protocol.nuon)
 
+# Load the raw protocol domain list from the bundled schema file.
 export def schema-domains-raw [] {
     open $cdp_schema_file | get domains
 }
 
-export def schema-domains [domain?: string] {
+# Return protocol domains, optionally filtered by domain name.
+export def schema-domains [
+    domain?: string # Domain name to filter on.
+] {
     if (is-nothing $domain) {
         schema-domains-raw
     } else {
@@ -40,15 +44,24 @@ def schema-kind-entries [kind: string, domain?: string] {
     }
 }
 
-export def schema-commands [domain?: string] {
+# Return protocol commands, optionally filtered by domain name.
+export def schema-commands [
+    domain?: string # Domain name to filter on.
+] {
     schema-kind-entries "command" $domain
 }
 
-export def schema-events [domain?: string] {
+# Return protocol events, optionally filtered by domain name.
+export def schema-events [
+    domain?: string # Domain name to filter on.
+] {
     schema-kind-entries "event" $domain
 }
 
-export def schema-types [domain?: string] {
+# Return protocol types, optionally filtered by domain name.
+export def schema-types [
+    domain?: string # Domain name to filter on.
+] {
     schema-kind-entries "type" $domain
 }
 
@@ -67,9 +80,17 @@ def parse-qualified [qualified: string] {
     }
 }
 
-export def schema-lookup [kind: string, qualified: string] {
+# Look up a protocol entry by kind and qualified name.
+export def schema-lookup [
+    kind: string # Schema entry kind: command, event, or type.
+    qualified: string # Qualified protocol name like `Page.navigate`.
+] {
     let parsed = (parse-qualified $qualified)
-    let entry = (schema-kind-entries $kind $parsed.domain | where qualified == $qualified | get -o 0)
+    let entry = (
+        schema-kind-entries $kind $parsed.domain
+        | where qualified == $qualified
+        | get -o 0
+    )
 
     if (is-nothing $entry) {
         error make {
@@ -123,7 +144,8 @@ def completion-results [entries: list<any>] {
                 {
                     value: $entry.qualified
                     description: (
-                        # Upstream protocol descriptions contain hard-wrapped newlines (including mid-sentence). Flatten to one line.
+                        # Upstream protocol descriptions contain hard-wrapped newlines.
+                        # Flatten them so completions stay on one line.
                         $entry
                         | get -o description
                         | default ""
@@ -140,7 +162,10 @@ def completion-token [context: string] {
     $context | split words | last | default ""
 }
 
-export def complete-cdp-domain [context: string] {
+# Complete CDP domain names from commandline context.
+export def complete-cdp-domain [
+    context: string # Current commandline context.
+] {
     let prefix = (completion-token $context)
 
     {
@@ -151,26 +176,44 @@ export def complete-cdp-domain [context: string] {
         }
         completions: (
             schema-domains
-            | where {|entry| ($entry.domain | str downcase | str contains ($prefix | str downcase)) }
+            | where {|entry|
+                (
+                    $entry.domain
+                    | str downcase
+                    | str contains ($prefix | str downcase)
+                )
+            }
             | each {|entry|
                 {
                     value: $entry.domain
-                    description: $"($entry.commands | default [] | length) commands, ($entry.events | default [] | length) events"
+                    description: (
+                        $"($entry.commands | default [] | length) commands, "
+                        + $"($entry.events | default [] | length) events"
+                    )
                 }
             }
         )
     }
 }
 
-export def complete-cdp-command [context: string] {
+# Complete CDP command names from commandline context.
+export def complete-cdp-command [
+    context: string # Current commandline context.
+] {
     completion-results (search-results "command" (completion-token $context))
 }
 
-export def complete-cdp-event [context: string] {
+# Complete CDP event names from commandline context.
+export def complete-cdp-event [
+    context: string # Current commandline context.
+] {
     completion-results (search-results "event" (completion-token $context))
 }
 
-export def complete-cdp-type [context: string] {
+# Complete CDP type names from commandline context.
+export def complete-cdp-type [
+    context: string # Current commandline context.
+] {
     completion-results (search-results "type" (completion-token $context))
 }
 
@@ -204,8 +247,14 @@ def validate-command-params [method: string, params: any, command: record] {
     }
 
     let keys = ($param_record | columns)
-    let unknown = ($keys | where {|name| not ($allowed | any {|allowed_name| $allowed_name == $name }) })
-    let missing = ($required | where {|name| not ($keys | any {|param_name| $param_name == $name }) })
+    let unknown = (
+        $keys
+        | where {|name| not ($allowed | any {|allowed_name| $allowed_name == $name }) }
+    )
+    let missing = (
+        $required
+        | where {|name| not ($keys | any {|param_name| $param_name == $name }) }
+    )
 
     if (($unknown | length) > 0) {
         error make {
@@ -220,15 +269,23 @@ def validate-command-params [method: string, params: any, command: record] {
     }
 }
 
-export def validate-command-input [method: string, params: any] {
+# Validate a CDP command call against the bundled schema.
+export def validate-command-input [
+    method: string # Qualified CDP command name.
+    params: any # Params record to validate.
+] {
     let command = (schema-lookup "command" $method)
     validate-command-params $method $params $command
 }
 
-export def validate-event-input [method: string] {
+# Validate a CDP event name against the bundled schema.
+export def validate-event-input [
+    method: string # Qualified CDP event name.
+] {
     schema-lookup "event" $method | ignore
 }
 
+# List protocol domains with command, event, and type counts.
 export def "cdp schema domains" [] {
     schema-domains
     | each {|domain_record|
@@ -239,44 +296,51 @@ export def "cdp schema domains" [] {
     }
 }
 
+# List protocol commands, optionally filtered by domain.
 export def "cdp schema commands" [
-    domain?: string
+    domain?: string # Domain name to filter on.
 ] {
     schema-commands $domain
 }
 
+# List protocol events, optionally filtered by domain.
 export def "cdp schema events" [
-    domain?: string
+    domain?: string # Domain name to filter on.
 ] {
     schema-events $domain
 }
 
+# List protocol types, optionally filtered by domain.
 export def "cdp schema types" [
-    domain?: string
+    domain?: string # Domain name to filter on.
 ] {
     schema-types $domain
 }
 
+# Show one protocol command by qualified name.
 export def "cdp schema command" [
-    qualified: string
+    qualified: string # Qualified CDP command name.
 ] {
     schema-lookup "command" $qualified
 }
 
+# Show one protocol event by qualified name.
 export def "cdp schema event" [
-    qualified: string
+    qualified: string # Qualified CDP event name.
 ] {
     schema-lookup "event" $qualified
 }
 
+# Show one protocol type by qualified name.
 export def "cdp schema type" [
-    qualified: string
+    qualified: string # Qualified CDP type name.
 ] {
     schema-lookup "type" $qualified
 }
 
+# Search commands, events, and types with one query string.
 export def "cdp schema search" [
-    query: string
+    query: string # Search text to match against qualified names and descriptions.
 ] {
     [
         (search-results "command" $query)
@@ -286,20 +350,23 @@ export def "cdp schema search" [
     | flatten
 }
 
+# Search only protocol commands with one query string.
 export def "cdp schema search commands" [
-    query: string
+    query: string # Search text to match against qualified names and descriptions.
 ] {
     search-results "command" $query
 }
 
+# Search only protocol events with one query string.
 export def "cdp schema search events" [
-    query: string
+    query: string # Search text to match against qualified names and descriptions.
 ] {
     search-results "event" $query
 }
 
+# Search only protocol types with one query string.
 export def "cdp schema search types" [
-    query: string
+    query: string # Search text to match against qualified names and descriptions.
 ] {
     search-results "type" $query
 }

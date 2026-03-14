@@ -7,7 +7,10 @@ use schema.nu [
     validate-event-input
 ]
 
-export def complete-cdp-session [context: string] {
+# Complete known websocket session names.
+export def complete-cdp-session [
+    context: string # Current commandline context.
+] {
     let prefix = ($context | split words | last | default "" | str downcase)
 
     {
@@ -89,22 +92,24 @@ def next-event-once [session: string, method: any, timeout: duration] {
     }
 }
 
+# Open a websocket session to a browser or page target.
 export def "cdp open" [
-    target: any
-    --name(-n): string
+    target: any # Browser port, discovery URL, websocket URL, or version record.
+    --name(-n): string # Session name to register locally.
 ] {
     let session = ($name | default $"cdp-((random int 1000000000..9999999999))")
     ws open (resolve-ws-url $target) --name $session
 }
 
+# Send a validated CDP command and await its response.
 export def "cdp call" [
-    session: string
-    method: string
-    params?: any
-    --id: int
-    --session-id(-s): string
-    --no-validate
-    --max-time(-m): duration = 30sec
+    session: string # Open websocket session name.
+    method: string # Qualified CDP command name.
+    params?: any # Command params record.
+    --id: int # Explicit request id to use.
+    --session-id(-s): string # Attached target session id.
+    --no-validate # Skip schema validation before sending.
+    --max-time(-m): duration = 30sec # Maximum time to wait for a response.
 ] {
     if (not $no_validate) {
         validate-command-input $method $params
@@ -143,12 +148,13 @@ export def "cdp call" [
     }
 }
 
+# Read the next CDP event, optionally filtered by method or attached session.
 export def "cdp event" [
-    session: string
-    method?: string
-    --session-id(-s): string
-    --no-validate
-    --max-time(-m): duration = 30sec
+    session: string # Open websocket session name.
+    method?: string # Qualified CDP event name to filter on.
+    --session-id(-s): string # Attached target session id to filter on.
+    --no-validate # Skip schema validation before listening.
+    --max-time(-m): duration = 30sec # Maximum time to wait for an event.
 ] {
     if ((not $no_validate) and (not (is-nothing $method))) {
         validate-event-input $method
@@ -163,11 +169,12 @@ export def "cdp event" [
     }
 }
 
+# Attach a browser session to a target and return the attached session metadata.
 export def "cdp attach" [
-    session: string
-    target: any
-    --flatten(-f) = true
-    --max-time(-m): duration = 30sec
+    session: string # Browser websocket session name.
+    target: any # Target id or target record.
+    --flatten(-f) = true # Request flattened session routing.
+    --max-time(-m): duration = 30sec # Maximum time to wait for the attach result.
 ] {
     cdp call $session "Target.attachToTarget" {
         targetId: (resolve-target-id $target)
@@ -175,16 +182,20 @@ export def "cdp attach" [
     } --max-time $max_time
 }
 
+# Detach an attached target session from the browser session.
 export def "cdp detach" [
-    session: string
-    attached_session: any
-    --max-time(-m): duration = 30sec
+    session: string # Browser websocket session name.
+    attached_session: any # Attached session id or attached session record.
+    --max-time(-m): duration = 30sec # Maximum time to wait for the detach result.
 ] {
     cdp call $session "Target.detachFromTarget" {
         sessionId: (resolve-session-id $attached_session)
     } --max-time $max_time
 }
 
-export def "cdp close" [session: string] {
+# Close a websocket session by name.
+export def "cdp close" [
+    session: string # Open websocket session name.
+] {
     ws close $session
 }

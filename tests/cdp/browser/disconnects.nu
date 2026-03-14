@@ -24,7 +24,10 @@ def main [http_port: int] {
                     } catch {|err|
                         let message = ($err.msg | str downcase)
 
-                        if (($message | str contains "not found") or ($message | str contains "closed")) {
+                        if (
+                            ($message | str contains "not found")
+                            or ($message | str contains "closed")
+                        ) {
                             null
                         } else {
                             error make $err
@@ -55,7 +58,9 @@ def main [http_port: int] {
                 }
             )
 
-            assert (($call_error | str length) > 0) "expected a closed target to reject new commands"
+            assert (
+                ($call_error | str length) > 0
+            ) "expected a closed target to reject new commands"
             assert str contains-any (
                 $call_error | str downcase
             ) [

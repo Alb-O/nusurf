@@ -56,10 +56,18 @@ def main [http_port: int, fixture_port: int] {
                     returnByValue: true
                 } | ignore
 
-                let console_a = (cdp event $page_a.session "Runtime.consoleAPICalled" --max-time 5sec)
-                let console_b = (cdp event $page_b.session "Runtime.consoleAPICalled" --max-time 5sec)
-                let request_a = (cdp event $page_a.session "Network.requestWillBeSent" --max-time 5sec)
-                let request_b = (cdp event $page_b.session "Network.requestWillBeSent" --max-time 5sec)
+                let console_a = (
+                    cdp event $page_a.session "Runtime.consoleAPICalled" --max-time 5sec
+                )
+                let console_b = (
+                    cdp event $page_b.session "Runtime.consoleAPICalled" --max-time 5sec
+                )
+                let request_a = (
+                    cdp event $page_a.session "Network.requestWillBeSent" --max-time 5sec
+                )
+                let request_b = (
+                    cdp event $page_b.session "Network.requestWillBeSent" --max-time 5sec
+                )
                 let failed_a = (cdp event $page_a.session "Network.loadingFailed" --max-time 5sec)
                 let failed_b = (cdp event $page_b.session "Network.loadingFailed" --max-time 5sec)
 
@@ -72,14 +80,22 @@ def main [http_port: int, fixture_port: int] {
 
                 let state_a = (
                     cdp call $page_a.session "Runtime.evaluate" {
-                        expression: "new Promise(resolve => setTimeout(() => resolve({ title: document.title, text: document.querySelector(`#app`).textContent }), 250))"
+                        expression: (
+                            "new Promise(resolve => setTimeout(() => "
+                            + "resolve({ title: document.title, "
+                            + "text: document.querySelector(`#app`).textContent }), 250))"
+                        )
                         awaitPromise: true
                         returnByValue: true
                     }
                 )
                 let state_b = (
                     cdp call $page_b.session "Runtime.evaluate" {
-                        expression: "new Promise(resolve => setTimeout(() => resolve({ title: document.title, text: document.querySelector(`#app`).textContent }), 250))"
+                        expression: (
+                            "new Promise(resolve => setTimeout(() => "
+                            + "resolve({ title: document.title, "
+                            + "text: document.querySelector(`#app`).textContent }), 250))"
+                        )
                         awaitPromise: true
                         returnByValue: true
                     }
