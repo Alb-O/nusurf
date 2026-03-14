@@ -52,6 +52,32 @@ ws "wss://echo.websocket.org"
 ws "wss://echo.websocket.org" --max-time 10sec
 ```
 
+### Persistent Sessions
+
+Open a long-lived WebSocket session and interact with it across multiple commands:
+
+```bash
+# Open a named session
+ws open "ws://127.0.0.1:9222/devtools/browser/..." --name cdp
+
+# Send messages on the existing connection
+echo '{"id":1,"method":"Browser.getVersion"}' | ws send cdp
+
+# Read the next message
+ws recv cdp --max-time 2sec
+
+# Read the next message with metadata
+ws recv cdp --max-time 2sec --full
+
+# List active sessions
+ws list
+
+# Close the session
+ws close cdp
+```
+
+This is the mode to use for protocols like CDP that require one persistent WebSocket connection.
+
 ### Sending Messages
 
 Send text messages by piping string data:
@@ -96,9 +122,9 @@ echo "Hello 🌍 测试 русский" | ws "wss://echo.websocket.org"
 
 ### Interactive WebSocket Sessions
 
-For interactive WebSocket communication, you can use Nushell's built-in commands to create interactive workflows.
+For ad hoc interaction, you can still use the one-shot `ws` command together with Nushell's built-in commands.
 
-**Note:** When connecting to echo servers or services that keep connections open, use the `--max-time` flag to close the connection after receiving responses. Without it, the connection stays open waiting for more data.
+**Note:** When connecting to echo servers or services that keep connections open, use the `--max-time` flag to close the one-shot connection after receiving responses. Without it, the connection stays open waiting for more data.
 
 #### Method 1: Using a loop with input
 

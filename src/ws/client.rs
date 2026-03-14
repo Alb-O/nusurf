@@ -6,22 +6,51 @@ use {
 	nu_protocol::{ShellError, Signals, Span, Value},
 	std::{
 		collections::VecDeque,
-		io::Read,
+		io::{ErrorKind, Read},
+		net::TcpStream,
 		sync::{
 			Arc, Mutex,
-			mpsc::{self, Receiver, RecvTimeoutError},
+			atomic::{AtomicBool, Ordering},
+			mpsc::{self, Receiver, RecvTimeoutError, TryRecvError},
 		},
 		thread,
 		time::{Duration, Instant},
 	},
-	tungstenite::ClientRequestBuilder,
+	tungstenite::{
+		ClientRequestBuilder, Error as WsError, Message, WebSocket,
+		stream::{MaybeTlsStream, NoDelay},
+	},
 	url::Url,
 };
 
-type WebSocketConnection = Arc<Mutex<tungstenite::WebSocket<tungstenite::stream::MaybeTlsStream<std::net::TcpStream>>>>;
+const SOCKET_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+type WebSocketStream = WebSocket<MaybeTlsStream<TcpStream>>;
+
+enum ControlMessage {
+	Send(Vec<u8>),
+	Close,
+}
+
+pub enum ReceivedMessage {
+	Text(String),
+	Binary(Vec<u8>),
+}
+
+#[derive(Clone)]
+pub struct SessionHandle {
+	tx: mpsc::SyncSender<ControlMessage>,
+	closed: Arc<AtomicBool>,
+}
+
+#[derive(Clone)]
+pub struct SessionClient {
+	handle: SessionHandle,
+	rx: Arc<Mutex<Receiver<ReceivedMessage>>>,
+}
 
 pub struct WebSocketClient {
-	rx: Arc<Mutex<Receiver<Vec<u8>>>>,
+	rx: Receiver<ReceivedMessage>,
 	deadline: Option<Instant>,
 	buf_deque: VecDeque<u8>,
 	signals: Signals,
@@ -29,9 +58,9 @@ pub struct WebSocketClient {
 }
 
 impl WebSocketClient {
-	pub fn new(rx: Receiver<Vec<u8>>, timeout: Option<Duration>, signals: Signals, span: Span) -> Self {
+	pub fn new(rx: Receiver<ReceivedMessage>, timeout: Option<Duration>, signals: Signals, span: Span) -> Self {
 		let mut client = Self {
-			rx: Arc::new(Mutex::new(rx)),
+			rx,
 			deadline: None,
 			buf_deque: VecDeque::new(),
 			signals,
@@ -42,11 +71,23 @@ impl WebSocketClient {
 		}
 		client
 	}
+
+	fn enqueue_message(&mut self, message: ReceivedMessage) {
+		match message {
+			ReceivedMessage::Text(text) => {
+				self.buf_deque.extend(text.bytes());
+				self.buf_deque.push_back(b'\n');
+			}
+			ReceivedMessage::Binary(data) => {
+				self.buf_deque.extend(data);
+				self.buf_deque.push_back(b'\n');
+			}
+		}
+	}
 }
 
 impl Read for WebSocketClient {
 	fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-		// If we have data in the buffer, return it immediately
 		if !self.buf_deque.is_empty() {
 			let mut len = 0;
 			for buf_slot in buf {
@@ -60,42 +101,23 @@ impl Read for WebSocketClient {
 			return Ok(len);
 		}
 
-		let rx = self.rx.lock().expect("Could not get lock on receiver");
-		let poll_interval = Duration::from_millis(100);
-
-		// Poll for new data with regular signal checking
 		loop {
-			// Check for signals (Ctrl+C) before each poll
 			if let Err(e) = self.signals.check(&self.span) {
 				return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, e.to_string()));
 			}
 
-			// Determine how long to wait this iteration
 			let wait_time = match self.deadline {
-				Some(deadline) => {
-					match deadline.checked_duration_since(Instant::now()) {
-						Some(remaining) => {
-							// Use the smaller of remaining time or poll interval
-							remaining.min(poll_interval)
-						}
-						None => {
-							// Deadline has already passed
-							return Ok(0);
-						}
-					}
-				}
-				None => poll_interval, // No deadline, just use poll interval
+				Some(deadline) => match deadline.checked_duration_since(Instant::now()) {
+					Some(remaining) => remaining.min(SOCKET_POLL_INTERVAL),
+					None => return Ok(0),
+				},
+				None => SOCKET_POLL_INTERVAL,
 			};
 
-			// Poll for data with timeout
-			match rx.recv_timeout(wait_time) {
-				Ok(bytes) => {
-					// Got data! Add to buffer and return it
-					for b in bytes {
-						self.buf_deque.push_back(b);
-					}
+			match self.rx.recv_timeout(wait_time) {
+				Ok(message) => {
+					self.enqueue_message(message);
 
-					// Return as much data as fits in the provided buffer
 					let mut len = 0;
 					for buf_slot in buf {
 						if let Some(b) = self.buf_deque.pop_front() {
@@ -107,22 +129,94 @@ impl Read for WebSocketClient {
 					}
 					return Ok(len);
 				}
-				Err(RecvTimeoutError::Timeout) => {
-					// No data available right now, continue loop to check signals again
-					continue;
-				}
-				Err(RecvTimeoutError::Disconnected) => {
-					// Channel disconnected - real EOF
-					return Ok(0);
-				}
+				Err(RecvTimeoutError::Timeout) => continue,
+				Err(RecvTimeoutError::Disconnected) => return Ok(0),
 			}
 		}
 	}
 }
 
+impl SessionHandle {
+	pub fn send(&self, data: Vec<u8>) -> Result<(), String> {
+		if self.closed.load(Ordering::SeqCst) {
+			return Err("WebSocket session is closed".to_string());
+		}
+
+		self.tx
+			.send(ControlMessage::Send(data))
+			.map_err(|_| "WebSocket worker is no longer running".to_string())
+	}
+
+	pub fn close(&self) -> Result<(), String> {
+		self.closed.store(true, Ordering::SeqCst);
+		let _ = self.tx.send(ControlMessage::Close);
+		Ok(())
+	}
+}
+
+impl SessionClient {
+	pub fn send(&self, data: Vec<u8>) -> Result<(), String> {
+		self.handle.send(data)
+	}
+
+	pub fn recv(
+		&self, timeout: Option<Duration>, signals: &Signals, span: Span,
+	) -> Result<Option<ReceivedMessage>, String> {
+		let rx = self
+			.rx
+			.lock()
+			.map_err(|_| "Failed to lock WebSocket receiver".to_string())?;
+		let deadline = timeout.map(|duration| Instant::now() + duration);
+
+		loop {
+			if let Err(e) = signals.check(&span) {
+				return Err(e.to_string());
+			}
+
+			let wait_time = match deadline {
+				Some(deadline) => match deadline.checked_duration_since(Instant::now()) {
+					Some(remaining) => remaining.min(SOCKET_POLL_INTERVAL),
+					None => return Ok(None),
+				},
+				None => SOCKET_POLL_INTERVAL,
+			};
+
+			match rx.recv_timeout(wait_time) {
+				Ok(message) => return Ok(Some(message)),
+				Err(RecvTimeoutError::Timeout) => continue,
+				Err(RecvTimeoutError::Disconnected) => return Ok(None),
+			}
+		}
+	}
+
+	pub fn close(&self) -> Result<(), String> {
+		self.handle.close()
+	}
+}
+
 pub fn connect(
 	url: Url, timeout: Option<Duration>, headers: HashMap<String, String>, signals: Signals, span: Span,
-) -> Option<(WebSocketClient, WebSocketConnection)> {
+) -> Option<(WebSocketClient, SessionHandle)> {
+	let (tx, rx, closed) = connect_components(url, headers)?;
+	let handle = SessionHandle { tx, closed };
+	Some((WebSocketClient::new(rx, timeout, signals, span), handle))
+}
+
+pub fn connect_session(url: Url, headers: HashMap<String, String>) -> Option<SessionClient> {
+	let (tx, rx, closed) = connect_components(url, headers)?;
+	Some(SessionClient {
+		handle: SessionHandle { tx, closed },
+		rx: Arc::new(Mutex::new(rx)),
+	})
+}
+
+fn connect_components(
+	url: Url, headers: HashMap<String, String>,
+) -> Option<(
+	mpsc::SyncSender<ControlMessage>,
+	Receiver<ReceivedMessage>,
+	Arc<AtomicBool>,
+)> {
 	log::trace!("Building WebSocket request for: {url}");
 
 	let mut builder = ClientRequestBuilder::new(url.as_str().parse().ok()?);
@@ -134,7 +228,6 @@ pub fn connect(
 	);
 
 	log::trace!("Setting Origin header to: {origin}");
-
 	builder = builder.with_header("Origin", origin);
 
 	for (k, v) in headers {
@@ -145,88 +238,148 @@ pub fn connect(
 	log::debug!("Attempting WebSocket connection...");
 
 	match tungstenite::connect(builder) {
-		Ok((websocket, _)) => {
+		Ok((mut websocket, _)) => {
 			log::debug!("WebSocket handshake completed successfully");
+			configure_socket(&mut websocket).ok()?;
 
+			let (tx_control, rx_control) = mpsc::sync_channel(1024);
 			let (tx_read, rx_read) = mpsc::sync_channel(1024);
+			let closed = Arc::new(AtomicBool::new(false));
 
-			log::trace!("Created channel for reader communication");
-
-			let tx_read = Arc::new(tx_read);
-			let websocket = Arc::new(Mutex::new(websocket));
-
-			// Thread for reading from websocket
-			let ws_clone = websocket.clone();
-			thread::Builder::new()
-				.name("websocket reader".to_string())
-				.spawn(move || {
-					log::debug!("WebSocket reader thread started");
-					loop {
-						let tx_read = tx_read.clone();
-						let mut ws = ws_clone.lock().unwrap();
-						match ws.read() {
-							Ok(msg) => match msg {
-								tungstenite::Message::Text(msg) => {
-									log::debug!("Received Text message: {} bytes", msg.len());
-									log::trace!("Text content: {msg:?}");
-									// Add newline after each WebSocket message for proper line separation
-									let mut data = msg.as_str().as_bytes().to_vec();
-									data.push(b'\n');
-									if tx_read.send(data).is_err() {
-										log::debug!("Channel closed, closing WebSocket");
-										ws.close(Some(tungstenite::protocol::CloseFrame {
-											code: tungstenite::protocol::frame::coding::CloseCode::Normal,
-											reason: "byte stream closed".into(),
-										}))
-										.expect("Could not close connection");
-										return;
-									}
-									log::trace!("Message sent to channel successfully, continuing to read...");
-								}
-								tungstenite::Message::Binary(msg) => {
-									log::debug!("Received Binary message: {} bytes", msg.len());
-									// Add newline after each WebSocket message for proper line separation
-									let mut data = msg.to_vec();
-									data.push(b'\n');
-									if tx_read.send(data).is_err() {
-										log::debug!("Channel closed, closing WebSocket");
-										ws.close(Some(tungstenite::protocol::CloseFrame {
-											code: tungstenite::protocol::frame::coding::CloseCode::Normal,
-											reason: "byte stream closed".into(),
-										}))
-										.expect("Could not close connection");
-										return;
-									}
-								}
-								tungstenite::Message::Close(..) => {
-									log::debug!("Received Close message");
-									drop(tx_read);
-									return;
-								}
-								_ => {
-									log::trace!("Received other message type: {msg:?}");
-									continue;
-								}
-							},
-							Err(e) => {
-								log::error!("WebSocket read error: {e:?}");
-								log::debug!("WebSocket reader thread exiting due to error");
-								drop(tx_read);
-								return;
-							}
-						}
-					}
-				})
-				.ok()?;
-
-			log::trace!("Created WebSocketClient, connection ready");
-
-			Some((WebSocketClient::new(rx_read, timeout, signals, span), websocket))
+			spawn_worker_thread(websocket, rx_control, tx_read, closed.clone())?;
+			Some((tx_control, rx_read, closed))
 		}
 		Err(e) => {
 			log::error!("Failed to connect to WebSocket: {e:?}");
 			None
 		}
+	}
+}
+
+fn spawn_worker_thread(
+	mut websocket: WebSocketStream, rx_control: Receiver<ControlMessage>, tx_read: mpsc::SyncSender<ReceivedMessage>,
+	closed: Arc<AtomicBool>,
+) -> Option<thread::JoinHandle<()>> {
+	thread::Builder::new()
+		.name("websocket worker".to_string())
+		.spawn(move || {
+			log::debug!("WebSocket worker thread started");
+			loop {
+				if closed.load(Ordering::SeqCst) {
+					let _ = websocket.close(Some(normal_close("session closed")));
+					return;
+				}
+
+				match flush_control_messages(&mut websocket, &rx_control, &closed) {
+					Ok(ControlFlow::Continue) => {}
+					Ok(ControlFlow::Closed) => return,
+					Err(e) => {
+						log::error!("WebSocket control error: {e}");
+						closed.store(true, Ordering::SeqCst);
+						return;
+					}
+				}
+
+				match websocket.read() {
+					Ok(Message::Text(msg)) => {
+						if tx_read.send(ReceivedMessage::Text(msg.to_string())).is_err() {
+							log::debug!("Channel closed, closing WebSocket");
+							closed.store(true, Ordering::SeqCst);
+							let _ = websocket.close(Some(normal_close("receiver dropped")));
+							return;
+						}
+					}
+					Ok(Message::Binary(msg)) => {
+						if tx_read.send(ReceivedMessage::Binary(msg.to_vec())).is_err() {
+							log::debug!("Channel closed, closing WebSocket");
+							closed.store(true, Ordering::SeqCst);
+							let _ = websocket.close(Some(normal_close("receiver dropped")));
+							return;
+						}
+					}
+					Ok(Message::Close(_)) => {
+						log::debug!("Received Close message");
+						closed.store(true, Ordering::SeqCst);
+						return;
+					}
+					Ok(other) => {
+						log::trace!("Ignoring WebSocket message: {other:?}");
+					}
+					Err(WsError::Io(err)) if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+						thread::yield_now();
+						continue;
+					}
+					Err(WsError::ConnectionClosed | WsError::AlreadyClosed) => {
+						log::debug!("WebSocket closed");
+						closed.store(true, Ordering::SeqCst);
+						return;
+					}
+					Err(e) => {
+						log::error!("WebSocket read error: {e:?}");
+						closed.store(true, Ordering::SeqCst);
+						return;
+					}
+				}
+			}
+		})
+		.ok()
+}
+
+enum ControlFlow {
+	Continue,
+	Closed,
+}
+
+fn flush_control_messages(
+	websocket: &mut WebSocketStream, rx_control: &Receiver<ControlMessage>, closed: &Arc<AtomicBool>,
+) -> Result<ControlFlow, String> {
+	loop {
+		match rx_control.try_recv() {
+			Ok(ControlMessage::Send(data)) => {
+				let message = match String::from_utf8(data.clone()) {
+					Ok(text) => Message::Text(text.into()),
+					Err(_) => Message::Binary(data.into()),
+				};
+				websocket
+					.send(message)
+					.map_err(|e| format!("Failed to send WebSocket message: {}", e))?;
+			}
+			Ok(ControlMessage::Close) => {
+				closed.store(true, Ordering::SeqCst);
+				let _ = websocket.close(Some(normal_close("session closed")));
+				return Ok(ControlFlow::Closed);
+			}
+			Err(TryRecvError::Empty) => return Ok(ControlFlow::Continue),
+			Err(TryRecvError::Disconnected) => {
+				closed.store(true, Ordering::SeqCst);
+				let _ = websocket.close(Some(normal_close("control channel closed")));
+				return Ok(ControlFlow::Closed);
+			}
+		}
+	}
+}
+
+fn configure_socket(websocket: &mut WebSocketStream) -> std::io::Result<()> {
+	let stream = websocket.get_mut();
+	stream.set_nodelay(true)?;
+	set_read_timeout(stream, Some(SOCKET_POLL_INTERVAL))
+}
+
+fn set_read_timeout(stream: &mut MaybeTlsStream<TcpStream>, timeout: Option<Duration>) -> std::io::Result<()> {
+	match stream {
+		MaybeTlsStream::Plain(socket) => socket.set_read_timeout(timeout),
+		MaybeTlsStream::NativeTls(socket) => socket.get_mut().set_read_timeout(timeout),
+		_ => Err(std::io::Error::new(
+			ErrorKind::Unsupported,
+			"setting read timeout is not supported for this TLS backend",
+		)),
+	}
+}
+
+fn normal_close(reason: &'static str) -> tungstenite::protocol::CloseFrame {
+	tungstenite::protocol::CloseFrame {
+		code: tungstenite::protocol::frame::coding::CloseCode::Normal,
+		reason: reason.into(),
 	}
 }
 
@@ -262,7 +415,6 @@ pub fn request_headers(headers: Option<Value>) -> Result<HashMap<String, String>
 
 			Value::List { vals: table, .. } => {
 				if table.len() == 1 {
-					// single row([key1 key2]; [val1 val2])
 					match &table[0] {
 						Value::Record { val, .. } => {
 							for (k, v) in &**val {
@@ -280,7 +432,6 @@ pub fn request_headers(headers: Option<Value>) -> Result<HashMap<String, String>
 						}
 					}
 				} else {
-					// primitive values ([key1 val1 key2 val2])
 					for row in table.chunks(2) {
 						if row.len() == 2 {
 							custom_headers.insert(row[0].coerce_string()?, row[1].clone());
@@ -306,6 +457,5 @@ pub fn request_headers(headers: Option<Value>) -> Result<HashMap<String, String>
 			result.insert(k, s);
 		}
 	}
-
 	Ok(result)
 }

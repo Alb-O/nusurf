@@ -1,6 +1,7 @@
 use {
 	nu_plugin_test_support::PluginTest,
 	nu_plugin_ws::WebSocketPlugin,
+	nu_protocol::{Span, Value},
 	std::{
 		net::{SocketAddr, TcpListener, TcpStream},
 		sync::{Arc, Barrier},
@@ -9,6 +10,23 @@ use {
 	},
 	tungstenite::{Message, WebSocket, accept},
 };
+
+fn eval_to_value(plugin_test: &mut PluginTest, nu_source: &str) -> Value {
+	plugin_test
+		.eval(nu_source)
+		.expect("Nushell evaluation should succeed")
+		.into_value(Span::test_data())
+		.expect("Pipeline should convert to a value")
+}
+
+fn record_string(value: &Value, key: &str) -> String {
+	value
+		.get_data_by_key(key)
+		.expect("record should contain requested key")
+		.coerce_str()
+		.expect("value should be coercible to string")
+		.to_string()
+}
 
 struct MockWebSocketServer {
 	addr: SocketAddr,
@@ -532,4 +550,82 @@ fn test_websocket_path_in_url() {
 		result.is_ok(),
 		"WebSocket should handle URLs with paths. Error: {result:#?}"
 	);
+}
+
+#[test]
+fn test_persistent_websocket_session_lifecycle() {
+	let server = MockWebSocketServer::new();
+	server.start();
+
+	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let session_name = "session-lifecycle-test";
+
+	let opened = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"ws open "{}" --name "{}""#, server.url(), session_name),
+	);
+	assert_eq!(record_string(&opened, "id"), session_name);
+	assert_eq!(record_string(&opened, "url"), server.url());
+
+	let listed = eval_to_value(&mut plugin_test, r#"ws list"#);
+	let Value::List { vals, .. } = listed else {
+		panic!("ws list should return a list");
+	};
+	assert!(vals.iter().any(|value| record_string(value, "id") == session_name));
+
+	let closed = eval_to_value(&mut plugin_test, &format!(r#"ws close "{}""#, session_name));
+	assert_eq!(record_string(&closed, "id"), session_name);
+
+	let listed_after_close = eval_to_value(&mut plugin_test, r#"ws list"#);
+	let Value::List { vals: remaining, .. } = listed_after_close else {
+		panic!("ws list should return a list");
+	};
+	assert!(!remaining.iter().any(|value| record_string(value, "id") == session_name));
+}
+
+#[test]
+fn test_persistent_websocket_send_and_receive() {
+	let server = MockWebSocketServer::new();
+	server.start();
+
+	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let session_name = "session-send-recv-test";
+
+	plugin_test
+		.eval(&format!(r#"ws open "{}" --name "{}""#, server.url(), session_name))
+		.expect("session should open");
+
+	plugin_test
+		.eval(&format!(r#"echo "hello session" | ws send "{}""#, session_name))
+		.expect("message should send");
+
+	let received = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"ws recv "{}" --max-time 2sec"#, session_name),
+	);
+	assert_eq!(
+		received.coerce_str().expect("received message should be text"),
+		"Echo: hello session"
+	);
+
+	plugin_test
+		.eval(&format!(r#"echo "full mode" | ws send "{}""#, session_name))
+		.expect("message should send");
+
+	let received_full = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"ws recv "{}" --max-time 2sec --full"#, session_name),
+	);
+	assert_eq!(record_string(&received_full, "type"), "text");
+	assert_eq!(record_string(&received_full, "data"), "Echo: full mode");
+
+	let timed_out = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"ws recv "{}" --max-time 100ms"#, session_name),
+	);
+	assert!(matches!(timed_out, Value::Nothing { .. }));
+
+	plugin_test
+		.eval(&format!(r#"ws close "{}""#, session_name))
+		.expect("session should close");
 }
