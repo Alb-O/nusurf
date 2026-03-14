@@ -75,4 +75,5 @@ Provide both long and short options
 
 ## Documentation
 
-Document every exported entity and its inputs
+Document every exported entity and its inputs (with grammar)
+Dev only inline comments should be lower-case (less grammar)

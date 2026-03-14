@@ -203,7 +203,7 @@ export def "cdp browser args" [
         "--disable-popup-blocking"
         "--disable-prompt-on-repost"
         "--disable-sync"
-        "--disable-blink-features=AutomationControlled" # Otherwise can trigger bot detection
+        "--disable-blink-features=AutomationControlled" # otherwise can trigger anti-bot
         "--disable-features=Translate"
         "--enable-features=NetworkService,NetworkServiceInProcess"
         "--metrics-recording-only"

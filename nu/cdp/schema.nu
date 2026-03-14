@@ -144,8 +144,8 @@ def completion-results [entries: list<any>] {
                 {
                     value: $entry.qualified
                     description: (
-                        # Upstream protocol descriptions contain hard-wrapped newlines.
-                        # Flatten them so completions stay on one line.
+                        # upstream protocol descriptions contain
+                        # hard-wrapped newlines, even mid-sentence
                         $entry
                         | get -o description
                         | default ""
