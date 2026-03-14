@@ -285,7 +285,7 @@ fn run_live_browser_script(script_name: &str, extra_args: &[String]) -> Result<(
 
 #[test]
 fn live_browser_nu_cdp_e2e() {
-	if let Err(err) = run_live_browser_script("cdp_live_browser_tests.nu", &[]) {
+	if let Err(err) = run_live_browser_script("cdp/browser/basic.nu", &[]) {
 		panic!("{err}");
 	}
 }
@@ -294,7 +294,7 @@ fn live_browser_nu_cdp_e2e() {
 fn live_browser_nu_cdp_event_routing() {
 	let fixture = FixtureServer::new();
 
-	if let Err(err) = run_live_browser_script("cdp_live_browser_event_routing.nu", &[fixture.port().to_string()]) {
+	if let Err(err) = run_live_browser_script("cdp/browser/events.nu", &[fixture.port().to_string()]) {
 		panic!("{err}");
 	}
 }
@@ -303,7 +303,7 @@ fn live_browser_nu_cdp_event_routing() {
 fn live_browser_nu_cdp_concurrent_targets() {
 	let fixture = FixtureServer::new();
 
-	if let Err(err) = run_live_browser_script("cdp_live_browser_concurrent.nu", &[fixture.port().to_string()]) {
+	if let Err(err) = run_live_browser_script("cdp/browser/concurrency.nu", &[fixture.port().to_string()]) {
 		panic!("{err}");
 	}
 }
@@ -312,14 +312,14 @@ fn live_browser_nu_cdp_concurrent_targets() {
 fn live_browser_nu_cdp_attached_sessions() {
 	let fixture = FixtureServer::new();
 
-	if let Err(err) = run_live_browser_script("cdp_live_browser_attached_sessions.nu", &[fixture.port().to_string()]) {
+	if let Err(err) = run_live_browser_script("cdp/browser/attached.nu", &[fixture.port().to_string()]) {
 		panic!("{err}");
 	}
 }
 
 #[test]
 fn live_browser_nu_cdp_disconnects() {
-	if let Err(err) = run_live_browser_script("cdp_live_browser_disconnect.nu", &[]) {
+	if let Err(err) = run_live_browser_script("cdp/browser/disconnects.nu", &[]) {
 		panic!("{err}");
 	}
 }

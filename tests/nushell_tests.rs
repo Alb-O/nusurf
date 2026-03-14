@@ -125,7 +125,7 @@ fn nushell_ws_tests_pass() {
 	server.start();
 
 	let plugin_path = PathBuf::from(env!("CARGO_BIN_EXE_nu_plugin_ws"));
-	let script_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/ws_tests.nu");
+	let script_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/ws/basic.nu");
 	let output = Command::new("nu")
 		.arg("--no-config-file")
 		.arg("--plugins")

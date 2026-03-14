@@ -156,7 +156,7 @@ fn cdp_module_runs_against_mock_server() {
 
 	let plugin_path = build_plugin_binary();
 	let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-	let script_path = repo_root.join("tests/cdp_tests.nu");
+	let script_path = repo_root.join("tests/cdp/mock.nu");
 	let include_path = repo_root.join("nu");
 
 	let output = Command::new("nu")
