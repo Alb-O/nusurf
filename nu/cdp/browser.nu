@@ -23,18 +23,25 @@ def json-version-url [target: any] {
     }
 }
 
+def ws-url-from-version-info [target: any, info: record] {
+    let ws_url = ($info | get -o webSocketDebuggerUrl)
+
+    if (is-nothing $ws_url) {
+        error make { msg: $"No webSocketDebuggerUrl in ($target | into string)" }
+    }
+
+    $ws_url
+}
+
+def http-ws-url [target: any] {
+    ws-url-from-version-info $target (http get (json-version-url $target))
+}
+
 export def resolve-ws-url [target: any] {
     let target_type = ($target | describe)
 
     if $target_type == "int" {
-        let info = (http get (json-version-url $target))
-        let ws_url = ($info | get -o webSocketDebuggerUrl)
-
-        if (is-nothing $ws_url) {
-            error make { msg: $"No webSocketDebuggerUrl in ($target | into string)" }
-        }
-
-        return $ws_url
+        return (http-ws-url $target)
     }
 
     if $target_type == "string" {
@@ -43,25 +50,12 @@ export def resolve-ws-url [target: any] {
         }
 
         if (($target | str starts-with "http://") or ($target | str starts-with "https://") or ($target | str ends-with "/json/version")) {
-            let info = (http get (json-version-url $target))
-            let ws_url = ($info | get -o webSocketDebuggerUrl)
-
-            if (is-nothing $ws_url) {
-                error make { msg: $"No webSocketDebuggerUrl in ($target)" }
-            }
-
-            return $ws_url
+            return (http-ws-url $target)
         }
     }
 
     if ($target_type | str starts-with "record") {
-        let ws_url = ($target | get -o webSocketDebuggerUrl)
-
-        if (is-nothing $ws_url) {
-            error make { msg: "Expected record with webSocketDebuggerUrl" }
-        }
-
-        return $ws_url
+        return (ws-url-from-version-info $target $target)
     }
 
     error make {
@@ -77,26 +71,28 @@ def browser-env-candidate [name: string] {
     }
 
     let raw_text = ($raw | into string | str trim)
-    let direct = (resolve-path-candidate $raw_text)
 
-    if (not (is-nothing $direct)) {
-        return $direct
-    }
-
-    let first = (
+    for candidate in [
         $raw_text
-        | split row ":"
-        | get -o 0
-        | str trim
-        | split row " "
-        | get -o 0
-    )
+        (
+            $raw_text
+            | split row ":"
+            | get -o 0
+            | str trim
+            | split words
+            | get -o 0
+        )
+    ] {
+        if (not (is-nothing $candidate)) {
+            let path = (resolve-path-candidate $candidate)
 
-    if (is-nothing $first) {
-        null
-    } else {
-        resolve-path-candidate $first
+            if (not (is-nothing $path)) {
+                return $path
+            }
+        }
     }
+
+    null
 }
 
 def chromium-browser-candidates [] {
@@ -132,23 +128,23 @@ def chromium-browser-candidates [] {
 }
 
 def discover-browser-path [] {
-    for candidate in [
-        (browser-env-candidate "NU_CDP_BROWSER")
-        (browser-env-candidate "BROWSER")
-    ] {
-        if (not (is-nothing $candidate)) {
-            return $candidate
-        }
+    let env_candidate = (
+        [
+            (browser-env-candidate "NU_CDP_BROWSER")
+            (browser-env-candidate "BROWSER")
+        ]
+        | compact
+        | get -o 0
+    )
+
+    if (not (is-nothing $env_candidate)) {
+        return $env_candidate
     }
 
-    for candidate in (chromium-browser-candidates) {
-        let path = (resolve-path-candidate $candidate)
-        if (not (is-nothing $path)) {
-            return $path
-        }
-    }
-
-    null
+    chromium-browser-candidates
+    | each {|candidate| resolve-path-candidate $candidate }
+    | compact
+    | get -o 0
 }
 
 export def "cdp discover" [target: any] {

@@ -29,6 +29,18 @@ export def complete-cdp-session [context: string] {
     }
 }
 
+def record-first [value: record, columns: list<string>] {
+    for column in $columns {
+        let match = ($value | get -o $column)
+
+        if (not (is-nothing $match)) {
+            return $match
+        }
+    }
+
+    null
+}
+
 def resolve-target-id [target: any] {
     let target_type = ($target | describe)
 
@@ -37,14 +49,10 @@ def resolve-target-id [target: any] {
     }
 
     if ($target_type | str starts-with "record") {
-        let target_id = ($target | get -o targetId)
+        let target_id = (record-first $target ["targetId", "id"])
+
         if (not (is-nothing $target_id)) {
             return $target_id
-        }
-
-        let id = ($target | get -o id)
-        if (not (is-nothing $id)) {
-            return $id
         }
     }
 
@@ -61,7 +69,8 @@ def resolve-session-id [session: any] {
     }
 
     if ($session_type | str starts-with "record") {
-        let session_id = ($session | get -o sessionId)
+        let session_id = (record-first $session ["sessionId"])
+
         if (not (is-nothing $session_id)) {
             return $session_id
         }
@@ -84,14 +93,8 @@ export def "cdp open" [
     target: any
     --name(-n): string
 ] {
-    let session = if (is-nothing $name) {
-        $"cdp-((random int 1000000000..9999999999))"
-    } else {
-        $name
-    }
-
-    let ws_url = (resolve-ws-url $target)
-    ws open $ws_url --name $session
+    let session = ($name | default $"cdp-((random int 1000000000..9999999999))")
+    ws open (resolve-ws-url $target) --name $session
 }
 
 export def "cdp call" [
@@ -108,19 +111,14 @@ export def "cdp call" [
     }
 
     let request_id = if (is-nothing $id) { random-id } else { $id }
-
-    mut command = {
-        id: $request_id
-        method: $method
-    }
-
-    if (not (is-nothing $params)) {
-        $command = ($command | upsert params $params)
-    }
-
-    if (not (is-nothing $session_id)) {
-        $command = ($command | upsert sessionId $session_id)
-    }
+    let command = (
+        {
+            id: $request_id
+            method: $method
+        }
+        | merge (if (is-nothing $params) { {} } else { {params: $params} })
+        | merge (if (is-nothing $session_id) { {} } else { {sessionId: $session_id} })
+    )
 
     $command | ws send-json $session
 

@@ -7,61 +7,49 @@ export def schema-domains-raw [] {
 }
 
 export def schema-domains [domain?: string] {
-    let domains = (schema-domains-raw)
-
     if (is-nothing $domain) {
-        $domains
+        schema-domains-raw
     } else {
-        $domains | where domain == $domain
+        schema-domains-raw | where domain == $domain
     }
 }
 
-def enrich-command [domain_name: string, command: record] {
-    $command
-    | upsert domain $domain_name
-    | upsert qualified $"($domain_name).($command.name)"
+def enrich-entry [domain_name: string, member: string, entry: record] {
+    (
+        $entry
+        | upsert domain $domain_name
+        | upsert qualified $"($domain_name).(($entry | get $member))"
+    )
 }
 
-def enrich-event [domain_name: string, event: record] {
-    $event
-    | upsert domain $domain_name
-    | upsert qualified $"($domain_name).($event.name)"
+def schema-members [field: string, member: string, domain?: string] {
+    schema-domains $domain
+    | each {|domain_record|
+        ($domain_record | get -o $field | default [])
+        | each {|entry| enrich-entry $domain_record.domain $member $entry }
+    }
+    | flatten
 }
 
-def enrich-type [domain_name: string, type_def: record] {
-    $type_def
-    | upsert domain $domain_name
-    | upsert qualified $"($domain_name).($type_def.id)"
+def schema-kind-entries [kind: string, domain?: string] {
+    match $kind {
+        "command" => (schema-members "commands" "name" $domain)
+        "event" => (schema-members "events" "name" $domain)
+        "type" => (schema-members "types" "id" $domain)
+        _ => (error make { msg: $"Unsupported CDP schema kind: ($kind)" })
+    }
 }
 
 export def schema-commands [domain?: string] {
-    schema-domains $domain
-    | each {|domain_record|
-        let domain_name = $domain_record.domain
-        ($domain_record | get -o commands | default [])
-        | each {|command| enrich-command $domain_name $command }
-    }
-    | flatten
+    schema-kind-entries "command" $domain
 }
 
 export def schema-events [domain?: string] {
-    schema-domains $domain
-    | each {|domain_record|
-        let domain_name = $domain_record.domain
-        ($domain_record | get -o events | default [])
-        | each {|event| enrich-event $domain_name $event }
-    }
-    | flatten
+    schema-kind-entries "event" $domain
 }
 
 export def schema-types [domain?: string] {
-    schema-domains $domain
-    | each {|domain_record|
-        let domain_name = $domain_record.domain
-        ($domain_record | get -o types | default [])
-        | each {|type_def| enrich-type $domain_name $type_def }
-    }
-    | flatten
+    schema-kind-entries "type" $domain
 }
 
 def parse-qualified [qualified: string] {
@@ -81,15 +69,7 @@ def parse-qualified [qualified: string] {
 
 export def schema-lookup [kind: string, qualified: string] {
     let parsed = (parse-qualified $qualified)
-
-    let entries = match $kind {
-        "command" => (schema-commands $parsed.domain)
-        "event" => (schema-events $parsed.domain)
-        "type" => (schema-types $parsed.domain)
-        _ => (error make { msg: $"Unsupported CDP schema lookup kind: ($kind)" })
-    }
-
-    let entry = ($entries | where qualified == $qualified | get -o 0)
+    let entry = (schema-kind-entries $kind $parsed.domain | where qualified == $qualified | get -o 0)
 
     if (is-nothing $entry) {
         error make {
@@ -118,24 +98,15 @@ def enrich-search-entry [kind: string, entry: record] {
 
 def search-results [kind: string, query: string] {
     let needle = ($query | str downcase)
-
-    let entries = match $kind {
-        "command" => (schema-commands)
-        "event" => (schema-events)
-        "type" => (schema-types)
-        _ => (error make { msg: $"Unsupported CDP schema search kind: ($kind)" })
-    }
-
-    $entries
+    schema-kind-entries $kind
     | each {|entry| enrich-search-entry $kind $entry }
     | where {|entry|
-        let qualified = ($entry.qualified | str downcase)
-        let member = ($entry.member | into string | str downcase)
-        let description = ($entry | get -o description | default "" | into string | str downcase)
-
-        (($qualified | str contains $needle)
-            or ($member | str contains $needle)
-            or ($description | str contains $needle))
+        [
+            $entry.qualified
+            ($entry.member | into string)
+            ($entry | get -o description | default "" | into string)
+        ]
+        | any {|value| ($value | str downcase | str contains $needle) }
     }
 }
 
