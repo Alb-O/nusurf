@@ -7,6 +7,28 @@ use schema.nu [
     validate-event-input
 ]
 
+export def complete-cdp-session [context: string] {
+    let prefix = ($context | split words | last | default "" | str downcase)
+
+    {
+        options: {
+            completion_algorithm: substring
+            sort: true
+            case_sensitive: false
+        }
+        completions: (
+            ws list
+            | where {|entry| ($entry.id | str downcase | str contains $prefix) }
+            | each {|entry|
+                {
+                    value: $entry.id
+                    description: $entry.url
+                }
+            }
+        )
+    }
+}
+
 def resolve-target-id [target: any] {
     let target_type = ($target | describe)
 
@@ -73,7 +95,7 @@ export def "cdp open" [
 }
 
 export def "cdp call" [
-    session: string
+    session: string@complete-cdp-session
     method: string@complete-cdp-command
     params?: any
     --id: int
@@ -124,7 +146,7 @@ export def "cdp call" [
 }
 
 export def "cdp event" [
-    session: string
+    session: string@complete-cdp-session
     method?: string@complete-cdp-event
     --session-id(-s): string
     --no-validate
@@ -144,7 +166,7 @@ export def "cdp event" [
 }
 
 export def "cdp attach" [
-    session: string
+    session: string@complete-cdp-session
     target: any
     --flatten(-f) = true
     --max-time(-m): duration = 30sec
@@ -156,7 +178,7 @@ export def "cdp attach" [
 }
 
 export def "cdp detach" [
-    session: string
+    session: string@complete-cdp-session
     attached_session: any
     --max-time(-m): duration = 30sec
 ] {
@@ -165,6 +187,6 @@ export def "cdp detach" [
     } --max-time $max_time
 }
 
-export def "cdp close" [session: string] {
+export def "cdp close" [session: string@complete-cdp-session] {
     ws close $session
 }

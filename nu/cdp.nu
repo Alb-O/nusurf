@@ -4,6 +4,7 @@ use cdp/schema.nu [
     complete-cdp-event
     complete-cdp-type
 ]
+use cdp/session.nu [complete-cdp-session]
 
 export use cdp/browser.nu [
     "cdp discover"

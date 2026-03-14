@@ -1,10 +1,12 @@
 use std/assert
 use cdp.nu *
+use cdp/session.nu [complete-cdp-session]
 
 def main [http_port: int, expected_ws_url: string] {
     test cdp discover $http_port $expected_ws_url
     test cdp call and event $http_port
     test cdp schema validation $http_port
+    test cdp session completion $http_port
 }
 
 def "test cdp discover" [http_port: int, expected_ws_url: string] {
@@ -77,6 +79,19 @@ def "test cdp schema validation" [http_port: int] {
     let unvalidated = (cdp call $session "Missing.method" {foo: "bar"} --no-validate --id 53 --session-id "session-53")
     assert equal $unvalidated.echoMethod "Missing.method"
     assert equal $unvalidated.echoParams.foo "bar"
+
+    cdp close $session | ignore
+}
+
+def "test cdp session completion" [http_port: int] {
+    let session = "browser"
+    let opened = (cdp open $http_port --name $session)
+
+    assert equal $opened.id $session
+
+    let completions = (complete-cdp-session "cdp call bro")
+    assert (($completions.completions | where value == "browser" | length) == 1)
+    assert (($completions.completions | where value == "browser" and description =~ "ws://127.0.0.1:" | length) == 1)
 
     cdp close $session | ignore
 }
