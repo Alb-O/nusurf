@@ -3,6 +3,7 @@ use {
 	nu_protocol::{
 		ByteStream, ByteStreamType, Category, LabeledError, PipelineData, Record, Signature, SyntaxShape, Type, Value,
 	},
+	serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue},
 	std::{
 		collections::HashMap,
 		sync::{
@@ -37,6 +38,10 @@ impl Plugin for WebSocketPlugin {
 			Box::new(WebSocketOpen),
 			Box::new(WebSocketSend),
 			Box::new(WebSocketRecv),
+			Box::new(WebSocketSendJson),
+			Box::new(WebSocketRecvJson),
+			Box::new(WebSocketAwait),
+			Box::new(WebSocketNextEvent),
 			Box::new(WebSocketClose),
 			Box::new(WebSocketList),
 		]
@@ -47,6 +52,10 @@ pub struct WebSocket;
 pub struct WebSocketOpen;
 pub struct WebSocketSend;
 pub struct WebSocketRecv;
+pub struct WebSocketSendJson;
+pub struct WebSocketRecvJson;
+pub struct WebSocketAwait;
+pub struct WebSocketNextEvent;
 pub struct WebSocketClose;
 pub struct WebSocketList;
 
@@ -98,11 +107,7 @@ impl PluginCommand for WebSocket {
 
 		let span = url.span();
 		let (_, requested_url) = http_parse_url(call, span, url).map_err(LabeledError::from)?;
-
-		if !["ws", "wss"].contains(&requested_url.scheme()) {
-			return Err(LabeledError::new("URL must use ws:// or wss://").with_label("Unsupported scheme", span));
-		}
-
+		validate_ws_scheme(&requested_url, span)?;
 		let timeout = parse_timeout(timeout)?;
 
 		if let Some((client, handle)) = connect(
@@ -116,10 +121,13 @@ impl PluginCommand for WebSocket {
 				handle.send(data).map_err(LabeledError::new)?;
 			}
 
-			let reader = Box::new(client);
-
 			return Ok(PipelineData::ByteStream(
-				ByteStream::read(reader, span, engine.signals().clone(), ByteStreamType::Unknown),
+				ByteStream::read(
+					Box::new(client),
+					span,
+					engine.signals().clone(),
+					ByteStreamType::Unknown,
+				),
 				None,
 			));
 		}
@@ -166,10 +174,7 @@ impl PluginCommand for WebSocketOpen {
 
 		let span = url.span();
 		let (url_text, requested_url) = http_parse_url(call, span, url).map_err(LabeledError::from)?;
-
-		if !["ws", "wss"].contains(&requested_url.scheme()) {
-			return Err(LabeledError::new("URL must use ws:// or wss://").with_label("Unsupported scheme", span));
-		}
+		validate_ws_scheme(&requested_url, span)?;
 
 		let session_id = name.unwrap_or_else(next_session_id);
 		let client = connect_session(requested_url, request_headers(headers).map_err(LabeledError::from)?)
@@ -232,7 +237,7 @@ impl PluginCommand for WebSocketRecv {
 	}
 
 	fn description(&self) -> &str {
-		"receive the next message from a persistent websocket session"
+		"receive the next raw message from a persistent websocket session"
 	}
 
 	fn signature(&self) -> Signature {
@@ -258,8 +263,172 @@ impl PluginCommand for WebSocketRecv {
 		let client = session_client(&session_id)?;
 		let timeout = parse_timeout(timeout)?;
 
-		let value = match client.recv(timeout, &engine.signals().clone(), call.head) {
-			Ok(Some(message)) => message_value(message, call.head, full),
+		let value = match client.recv_raw(timeout, &engine.signals().clone(), call.head) {
+			Ok(Some(message)) => raw_message_value(message, call.head, full),
+			Ok(None) => Value::nothing(call.head),
+			Err(err) => return Err(LabeledError::new(err)),
+		};
+
+		Ok(PipelineData::Value(value, None))
+	}
+}
+
+impl PluginCommand for WebSocketSendJson {
+	type Plugin = WebSocketPlugin;
+
+	fn name(&self) -> &str {
+		"ws send-json"
+	}
+
+	fn description(&self) -> &str {
+		"send structured JSON on a persistent websocket session"
+	}
+
+	fn signature(&self) -> Signature {
+		Signature::build(self.name())
+			.input_output_types(vec![(Type::Any, Type::Nothing)])
+			.required("SESSION", SyntaxShape::String, "session id returned by `ws open`")
+			.filter()
+			.category(Category::Network)
+	}
+
+	fn run(
+		&self, _plugin: &Self::Plugin, _engine: &EngineInterface, call: &EvaluatedCall, input: PipelineData,
+	) -> Result<PipelineData, LabeledError> {
+		let session_id: String = call.req(0)?;
+		let client = session_client(&session_id)?;
+		let json = pipeline_input_to_json(input, call.head)?;
+		let bytes = serde_json::to_vec(&json)
+			.map_err(|e| LabeledError::new(format!("Failed to serialize JSON payload: {}", e)))?;
+
+		client.send(bytes).map_err(LabeledError::new)?;
+		Ok(PipelineData::Value(Value::nothing(call.head), None))
+	}
+}
+
+impl PluginCommand for WebSocketRecvJson {
+	type Plugin = WebSocketPlugin;
+
+	fn name(&self) -> &str {
+		"ws recv-json"
+	}
+
+	fn description(&self) -> &str {
+		"receive the next JSON message from a persistent websocket session"
+	}
+
+	fn signature(&self) -> Signature {
+		Signature::build(self.name())
+			.input_output_types(vec![(Type::Nothing, Type::Any)])
+			.required("SESSION", SyntaxShape::String, "session id returned by `ws open`")
+			.named(
+				"max-time",
+				SyntaxShape::Duration,
+				"max duration before timeout occurs",
+				Some('m'),
+			)
+			.category(Category::Network)
+	}
+
+	fn run(
+		&self, _plugin: &Self::Plugin, engine: &EngineInterface, call: &EvaluatedCall, _input: PipelineData,
+	) -> Result<PipelineData, LabeledError> {
+		let session_id: String = call.req(0)?;
+		let timeout: Option<Value> = call.get_flag("max-time")?;
+		let client = session_client(&session_id)?;
+		let timeout = parse_timeout(timeout)?;
+
+		let value = match client.recv_json(timeout, &engine.signals().clone(), call.head) {
+			Ok(Some(json)) => json_to_nu_value(json, call.head),
+			Ok(None) => Value::nothing(call.head),
+			Err(err) => return Err(LabeledError::new(err)),
+		};
+
+		Ok(PipelineData::Value(value, None))
+	}
+}
+
+impl PluginCommand for WebSocketAwait {
+	type Plugin = WebSocketPlugin;
+
+	fn name(&self) -> &str {
+		"ws await"
+	}
+
+	fn description(&self) -> &str {
+		"wait for the JSON response with the given id on a persistent websocket session"
+	}
+
+	fn signature(&self) -> Signature {
+		Signature::build(self.name())
+			.input_output_types(vec![(Type::Nothing, Type::Any)])
+			.required("SESSION", SyntaxShape::String, "session id returned by `ws open`")
+			.required("ID", SyntaxShape::Any, "JSON response id to wait for")
+			.named(
+				"max-time",
+				SyntaxShape::Duration,
+				"max duration before timeout occurs",
+				Some('m'),
+			)
+			.category(Category::Network)
+	}
+
+	fn run(
+		&self, _plugin: &Self::Plugin, engine: &EngineInterface, call: &EvaluatedCall, _input: PipelineData,
+	) -> Result<PipelineData, LabeledError> {
+		let session_id: String = call.req(0)?;
+		let id: Value = call.req(1)?;
+		let timeout: Option<Value> = call.get_flag("max-time")?;
+		let client = session_client(&session_id)?;
+		let timeout = parse_timeout(timeout)?;
+		let id_key = value_to_id_key(&id)?;
+
+		let value = match client.await_response(&id_key, timeout, &engine.signals().clone(), call.head) {
+			Ok(Some(json)) => json_to_nu_value(json, call.head),
+			Ok(None) => Value::nothing(call.head),
+			Err(err) => return Err(LabeledError::new(err)),
+		};
+
+		Ok(PipelineData::Value(value, None))
+	}
+}
+
+impl PluginCommand for WebSocketNextEvent {
+	type Plugin = WebSocketPlugin;
+
+	fn name(&self) -> &str {
+		"ws next-event"
+	}
+
+	fn description(&self) -> &str {
+		"receive the next routed JSON event from a persistent websocket session"
+	}
+
+	fn signature(&self) -> Signature {
+		Signature::build(self.name())
+			.input_output_types(vec![(Type::Nothing, Type::Any)])
+			.required("SESSION", SyntaxShape::String, "session id returned by `ws open`")
+			.optional("METHOD", SyntaxShape::String, "event method to filter on")
+			.named(
+				"max-time",
+				SyntaxShape::Duration,
+				"max duration before timeout occurs",
+				Some('m'),
+			)
+			.category(Category::Network)
+	}
+
+	fn run(
+		&self, _plugin: &Self::Plugin, engine: &EngineInterface, call: &EvaluatedCall, _input: PipelineData,
+	) -> Result<PipelineData, LabeledError> {
+		let session_id: String = call.req(0)?;
+		let method: Option<String> = call.opt(1)?;
+		let timeout: Option<Value> = call.get_flag("max-time")?;
+		let client = session_client(&session_id)?;
+		let timeout = parse_timeout(timeout)?;
+
+		let value = match client.next_event(method.as_deref(), timeout, &engine.signals().clone(), call.head) {
+			Ok(Some(json)) => json_to_nu_value(json, call.head),
 			Ok(None) => Value::nothing(call.head),
 			Err(err) => return Err(LabeledError::new(err)),
 		};
@@ -327,7 +496,7 @@ impl PluginCommand for WebSocketList {
 			.iter()
 			.map(|(id, entry)| session_value(id, &entry.url, call.head))
 			.collect::<Vec<_>>();
-		values.sort_by(|left, right| session_sort_key(left).cmp(&session_sort_key(right)));
+		values.sort_by_key(session_sort_key);
 		Ok(PipelineData::Value(Value::list(values, call.head), None))
 	}
 }
@@ -349,6 +518,14 @@ fn init_logging(verbose: Option<Value>) {
 	let _ = env_logger::Builder::from_default_env()
 		.filter_level(log_level_filter)
 		.try_init();
+}
+
+fn validate_ws_scheme(url: &url::Url, span: nu_protocol::Span) -> Result<(), LabeledError> {
+	if ["ws", "wss"].contains(&url.scheme()) {
+		Ok(())
+	} else {
+		Err(LabeledError::new("URL must use ws:// or wss://").with_label("Unsupported scheme", span))
+	}
 }
 
 fn parse_timeout(timeout: Option<Value>) -> Result<Option<Duration>, LabeledError> {
@@ -379,7 +556,96 @@ fn pipeline_input_to_bytes(
 	}
 }
 
-fn message_value(message: ReceivedMessage, span: nu_protocol::Span, full: bool) -> Value {
+fn pipeline_input_to_json(input: PipelineData, span: nu_protocol::Span) -> Result<JsonValue, LabeledError> {
+	match input {
+		PipelineData::Value(value, ..) => value_to_json(value),
+		PipelineData::ListStream(stream, ..) => stream.into_value().map_err(LabeledError::from).and_then(value_to_json),
+		PipelineData::ByteStream(stream, ..) => {
+			let bytes = stream.into_bytes().map_err(|e| LabeledError::new(e.to_string()))?;
+			let text = String::from_utf8(bytes)
+				.map_err(|e| LabeledError::new(format!("JSON byte stream is not valid UTF-8: {}", e)))?;
+			serde_json::from_str(&text).map_err(|e| LabeledError::new(format!("Failed to parse JSON payload: {}", e)))
+		}
+		PipelineData::Empty => Err(LabeledError::new("JSON input is required").with_label("Missing input", span)),
+	}
+}
+
+fn value_to_json(value: Value) -> Result<JsonValue, LabeledError> {
+	match value {
+		Value::Nothing { .. } => Ok(JsonValue::Null),
+		Value::Bool { val, .. } => Ok(JsonValue::Bool(val)),
+		Value::Int { val, .. } => Ok(JsonValue::Number(val.into())),
+		Value::Float { val, .. } => JsonNumber::from_f64(val)
+			.map(JsonValue::Number)
+			.ok_or_else(|| LabeledError::new("Cannot encode non-finite float as JSON")),
+		Value::String { val, .. } | Value::Glob { val, .. } => Ok(JsonValue::String(val)),
+		Value::Record { val, .. } => {
+			let mut object = JsonMap::new();
+			for (key, item) in val.iter() {
+				object.insert(key.to_string(), value_to_json(item.clone())?);
+			}
+			Ok(JsonValue::Object(object))
+		}
+		Value::List { vals, .. } => vals
+			.into_iter()
+			.map(value_to_json)
+			.collect::<Result<Vec<_>, _>>()
+			.map(JsonValue::Array),
+		Value::Binary { .. } => Err(LabeledError::new("Binary values cannot be encoded as JSON")),
+		Value::Error { error, .. } => Err(LabeledError::new(format!("Cannot encode error as JSON: {}", error))),
+		other => Err(LabeledError::new(format!(
+			"Cannot encode Nushell value of type '{}' as JSON",
+			other.get_type()
+		))),
+	}
+}
+
+fn value_to_id_key(value: &Value) -> Result<String, LabeledError> {
+	match value {
+		Value::Int { val, .. } => Ok(val.to_string()),
+		Value::String { val, .. } => Ok(val.clone()),
+		Value::Bool { val, .. } => Ok(val.to_string()),
+		Value::Nothing { .. } => Ok("null".to_string()),
+		other => Err(LabeledError::new(format!(
+			"Unsupported response id type '{}'",
+			other.get_type()
+		))),
+	}
+}
+
+fn json_to_nu_value(value: JsonValue, span: nu_protocol::Span) -> Value {
+	match value {
+		JsonValue::Null => Value::nothing(span),
+		JsonValue::Bool(val) => Value::bool(val, span),
+		JsonValue::Number(number) => {
+			if let Some(val) = number.as_i64() {
+				Value::int(val, span)
+			} else if let Some(val) = number.as_u64() {
+				if let Ok(val) = i64::try_from(val) {
+					Value::int(val, span)
+				} else {
+					Value::float(val as f64, span)
+				}
+			} else {
+				Value::float(number.as_f64().unwrap_or_default(), span)
+			}
+		}
+		JsonValue::String(val) => Value::string(val, span),
+		JsonValue::Array(values) => Value::list(
+			values.into_iter().map(|value| json_to_nu_value(value, span)).collect(),
+			span,
+		),
+		JsonValue::Object(object) => {
+			let mut record = Record::new();
+			for (key, value) in object {
+				record.push(key, json_to_nu_value(value, span));
+			}
+			Value::record(record, span)
+		}
+	}
+}
+
+fn raw_message_value(message: ReceivedMessage, span: nu_protocol::Span, full: bool) -> Value {
 	match message {
 		ReceivedMessage::Text(text) if !full => Value::string(text, span),
 		ReceivedMessage::Binary(data) if !full => Value::binary(data, span),

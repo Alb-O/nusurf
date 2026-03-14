@@ -4,12 +4,13 @@ use std::collections::HashMap;
 use {
 	nu_plugin::EvaluatedCall,
 	nu_protocol::{ShellError, Signals, Span, Value},
+	serde_json::Value as JsonValue,
 	std::{
 		collections::VecDeque,
 		io::{ErrorKind, Read},
 		net::TcpStream,
 		sync::{
-			Arc, Mutex,
+			Arc, Condvar, Mutex,
 			atomic::{AtomicBool, Ordering},
 			mpsc::{self, Receiver, RecvTimeoutError, TryRecvError},
 		},
@@ -26,12 +27,14 @@ use {
 const SOCKET_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 type WebSocketStream = WebSocket<MaybeTlsStream<TcpStream>>;
+type SharedSessionState = Arc<(Mutex<SessionQueues>, Condvar)>;
 
 enum ControlMessage {
 	Send(Vec<u8>),
 	Close,
 }
 
+#[derive(Clone, Debug)]
 pub enum ReceivedMessage {
 	Text(String),
 	Binary(Vec<u8>),
@@ -46,7 +49,7 @@ pub struct SessionHandle {
 #[derive(Clone)]
 pub struct SessionClient {
 	handle: SessionHandle,
-	rx: Arc<Mutex<Receiver<ReceivedMessage>>>,
+	state: SharedSessionState,
 }
 
 pub struct WebSocketClient {
@@ -55,6 +58,19 @@ pub struct WebSocketClient {
 	buf_deque: VecDeque<u8>,
 	signals: Signals,
 	span: Span,
+}
+
+struct SessionQueues {
+	raw_messages: VecDeque<ReceivedMessage>,
+	responses_by_id: HashMap<String, VecDeque<JsonValue>>,
+	events_all: VecDeque<JsonValue>,
+	events_by_method: HashMap<String, VecDeque<JsonValue>>,
+	closed: bool,
+}
+
+enum ControlFlow {
+	Continue,
+	Closed,
 }
 
 impl WebSocketClient {
@@ -159,16 +175,58 @@ impl SessionClient {
 		self.handle.send(data)
 	}
 
-	pub fn recv(
+	pub fn recv_raw(
 		&self, timeout: Option<Duration>, signals: &Signals, span: Span,
 	) -> Result<Option<ReceivedMessage>, String> {
-		let rx = self
-			.rx
-			.lock()
-			.map_err(|_| "Failed to lock WebSocket receiver".to_string())?;
+		self.wait_for(timeout, signals, span, |queues| queues.raw_messages.pop_front())
+	}
+
+	pub fn recv_json(
+		&self, timeout: Option<Duration>, signals: &Signals, span: Span,
+	) -> Result<Option<JsonValue>, String> {
+		match self.recv_raw(timeout, signals, span)? {
+			Some(ReceivedMessage::Text(text)) => serde_json::from_str(&text)
+				.map(Some)
+				.map_err(|e| format!("Failed to parse JSON message: {}", e)),
+			Some(ReceivedMessage::Binary(_)) => Err("Received binary message while expecting JSON".to_string()),
+			None => Ok(None),
+		}
+	}
+
+	pub fn await_response(
+		&self, id: &str, timeout: Option<Duration>, signals: &Signals, span: Span,
+	) -> Result<Option<JsonValue>, String> {
+		self.wait_for(timeout, signals, span, |queues| pop_response(queues, id))
+	}
+
+	pub fn next_event(
+		&self, method: Option<&str>, timeout: Option<Duration>, signals: &Signals, span: Span,
+	) -> Result<Option<JsonValue>, String> {
+		self.wait_for(timeout, signals, span, |queues| pop_event(queues, method))
+	}
+
+	pub fn close(&self) -> Result<(), String> {
+		self.handle.close()
+	}
+
+	fn wait_for<T, F>(
+		&self, timeout: Option<Duration>, signals: &Signals, span: Span, mut pop: F,
+	) -> Result<Option<T>, String>
+	where
+		F: FnMut(&mut SessionQueues) -> Option<T>, {
 		let deadline = timeout.map(|duration| Instant::now() + duration);
+		let (lock, condvar) = &*self.state;
+		let mut queues = lock
+			.lock()
+			.map_err(|_| "Failed to lock WebSocket session state".to_string())?;
 
 		loop {
+			if let Some(item) = pop(&mut queues) {
+				return Ok(Some(item));
+			}
+			if queues.closed {
+				return Ok(None);
+			}
 			if let Err(e) = signals.check(&span) {
 				return Err(e.to_string());
 			}
@@ -181,42 +239,33 @@ impl SessionClient {
 				None => SOCKET_POLL_INTERVAL,
 			};
 
-			match rx.recv_timeout(wait_time) {
-				Ok(message) => return Ok(Some(message)),
-				Err(RecvTimeoutError::Timeout) => continue,
-				Err(RecvTimeoutError::Disconnected) => return Ok(None),
-			}
+			let (new_queues, _) = condvar
+				.wait_timeout(queues, wait_time)
+				.map_err(|_| "Failed to wait for WebSocket session state".to_string())?;
+			queues = new_queues;
 		}
-	}
-
-	pub fn close(&self) -> Result<(), String> {
-		self.handle.close()
 	}
 }
 
 pub fn connect(
 	url: Url, timeout: Option<Duration>, headers: HashMap<String, String>, signals: Signals, span: Span,
 ) -> Option<(WebSocketClient, SessionHandle)> {
-	let (tx, rx, closed) = connect_components(url, headers)?;
+	let websocket = open_websocket(url, headers)?;
+	let (tx, rx, closed) = connect_components(websocket)?;
 	let handle = SessionHandle { tx, closed };
 	Some((WebSocketClient::new(rx, timeout, signals, span), handle))
 }
 
 pub fn connect_session(url: Url, headers: HashMap<String, String>) -> Option<SessionClient> {
-	let (tx, rx, closed) = connect_components(url, headers)?;
+	let websocket = open_websocket(url, headers)?;
+	let (tx, state, closed) = connect_session_components(websocket)?;
 	Some(SessionClient {
 		handle: SessionHandle { tx, closed },
-		rx: Arc::new(Mutex::new(rx)),
+		state,
 	})
 }
 
-fn connect_components(
-	url: Url, headers: HashMap<String, String>,
-) -> Option<(
-	mpsc::SyncSender<ControlMessage>,
-	Receiver<ReceivedMessage>,
-	Arc<AtomicBool>,
-)> {
+fn open_websocket(url: Url, headers: HashMap<String, String>) -> Option<WebSocketStream> {
 	log::trace!("Building WebSocket request for: {url}");
 
 	let mut builder = ClientRequestBuilder::new(url.as_str().parse().ok()?);
@@ -241,19 +290,48 @@ fn connect_components(
 		Ok((mut websocket, _)) => {
 			log::debug!("WebSocket handshake completed successfully");
 			configure_socket(&mut websocket).ok()?;
-
-			let (tx_control, rx_control) = mpsc::sync_channel(1024);
-			let (tx_read, rx_read) = mpsc::sync_channel(1024);
-			let closed = Arc::new(AtomicBool::new(false));
-
-			spawn_worker_thread(websocket, rx_control, tx_read, closed.clone())?;
-			Some((tx_control, rx_read, closed))
+			Some(websocket)
 		}
 		Err(e) => {
 			log::error!("Failed to connect to WebSocket: {e:?}");
 			None
 		}
 	}
+}
+
+fn connect_components(
+	websocket: WebSocketStream,
+) -> Option<(
+	mpsc::SyncSender<ControlMessage>,
+	Receiver<ReceivedMessage>,
+	Arc<AtomicBool>,
+)> {
+	let (tx_control, rx_control) = mpsc::sync_channel(1024);
+	let (tx_read, rx_read) = mpsc::sync_channel(1024);
+	let closed = Arc::new(AtomicBool::new(false));
+
+	spawn_worker_thread(websocket, rx_control, tx_read, closed.clone())?;
+	Some((tx_control, rx_read, closed))
+}
+
+fn connect_session_components(
+	websocket: WebSocketStream,
+) -> Option<(mpsc::SyncSender<ControlMessage>, SharedSessionState, Arc<AtomicBool>)> {
+	let (tx_control, rx_control) = mpsc::sync_channel(1024);
+	let closed = Arc::new(AtomicBool::new(false));
+	let state = Arc::new((
+		Mutex::new(SessionQueues {
+			raw_messages: VecDeque::new(),
+			responses_by_id: HashMap::new(),
+			events_all: VecDeque::new(),
+			events_by_method: HashMap::new(),
+			closed: false,
+		}),
+		Condvar::new(),
+	));
+
+	spawn_session_worker_thread(websocket, rx_control, state.clone(), closed.clone())?;
+	Some((tx_control, state, closed))
 }
 
 fn spawn_worker_thread(
@@ -325,9 +403,67 @@ fn spawn_worker_thread(
 		.ok()
 }
 
-enum ControlFlow {
-	Continue,
-	Closed,
+fn spawn_session_worker_thread(
+	mut websocket: WebSocketStream, rx_control: Receiver<ControlMessage>, state: SharedSessionState,
+	closed: Arc<AtomicBool>,
+) -> Option<thread::JoinHandle<()>> {
+	thread::Builder::new()
+		.name("websocket session worker".to_string())
+		.spawn(move || {
+			log::debug!("WebSocket session worker thread started");
+			loop {
+				if closed.load(Ordering::SeqCst) {
+					let _ = websocket.close(Some(normal_close("session closed")));
+					mark_session_closed(&state);
+					return;
+				}
+
+				match flush_control_messages(&mut websocket, &rx_control, &closed) {
+					Ok(ControlFlow::Continue) => {}
+					Ok(ControlFlow::Closed) => {
+						mark_session_closed(&state);
+						return;
+					}
+					Err(e) => {
+						log::error!("WebSocket control error: {e}");
+						closed.store(true, Ordering::SeqCst);
+						mark_session_closed(&state);
+						return;
+					}
+				}
+
+				match websocket.read() {
+					Ok(Message::Text(msg)) => enqueue_session_message(&state, ReceivedMessage::Text(msg.to_string())),
+					Ok(Message::Binary(msg)) => enqueue_session_message(&state, ReceivedMessage::Binary(msg.to_vec())),
+					Ok(Message::Close(_)) => {
+						log::debug!("Received Close message");
+						closed.store(true, Ordering::SeqCst);
+						mark_session_closed(&state);
+						return;
+					}
+					Ok(other) => {
+						log::trace!("Ignoring WebSocket message: {other:?}");
+					}
+					Err(WsError::Io(err)) if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+						thread::yield_now();
+						continue;
+					}
+					Err(WsError::ConnectionClosed | WsError::AlreadyClosed) => {
+						log::debug!("WebSocket closed");
+						closed.store(true, Ordering::SeqCst);
+						mark_session_closed(&state);
+						return;
+					}
+					Err(e) => {
+						log::error!("WebSocket read error: {e:?}");
+						closed.store(true, Ordering::SeqCst);
+						mark_session_closed(&state);
+						return;
+					}
+				}
+			}
+		})
+		.ok()
 }
 
 fn flush_control_messages(
@@ -335,15 +471,9 @@ fn flush_control_messages(
 ) -> Result<ControlFlow, String> {
 	loop {
 		match rx_control.try_recv() {
-			Ok(ControlMessage::Send(data)) => {
-				let message = match String::from_utf8(data.clone()) {
-					Ok(text) => Message::Text(text.into()),
-					Err(_) => Message::Binary(data.into()),
-				};
-				websocket
-					.send(message)
-					.map_err(|e| format!("Failed to send WebSocket message: {}", e))?;
-			}
+			Ok(ControlMessage::Send(data)) => websocket
+				.send(send_message(data))
+				.map_err(|e| format!("Failed to send WebSocket message: {}", e))?,
 			Ok(ControlMessage::Close) => {
 				closed.store(true, Ordering::SeqCst);
 				let _ = websocket.close(Some(normal_close("session closed")));
@@ -357,6 +487,68 @@ fn flush_control_messages(
 			}
 		}
 	}
+}
+
+fn enqueue_session_message(state: &SharedSessionState, message: ReceivedMessage) {
+	let (lock, condvar) = &**state;
+	if let Ok(mut queues) = lock.lock() {
+		if let ReceivedMessage::Text(text) = &message
+			&& let Ok(json) = serde_json::from_str::<JsonValue>(text)
+		{
+			if let Some(id) = json_id_key(&json) {
+				queues.responses_by_id.entry(id).or_default().push_back(json);
+			} else if let Some(method) = json_method_key(&json) {
+				queues.events_all.push_back(json.clone());
+				queues.events_by_method.entry(method).or_default().push_back(json);
+			}
+		}
+
+		queues.raw_messages.push_back(message);
+		condvar.notify_all();
+	}
+}
+
+fn mark_session_closed(state: &SharedSessionState) {
+	let (lock, condvar) = &**state;
+	if let Ok(mut queues) = lock.lock() {
+		queues.closed = true;
+		condvar.notify_all();
+	}
+}
+
+fn pop_response(queues: &mut SessionQueues, id: &str) -> Option<JsonValue> {
+	let response = queues.responses_by_id.get_mut(id)?.pop_front();
+	if matches!(queues.responses_by_id.get(id), Some(queue) if queue.is_empty()) {
+		queues.responses_by_id.remove(id);
+	}
+	response
+}
+
+fn pop_event(queues: &mut SessionQueues, method: Option<&str>) -> Option<JsonValue> {
+	match method {
+		Some(method) => {
+			let event = queues.events_by_method.get_mut(method)?.pop_front();
+			if matches!(queues.events_by_method.get(method), Some(queue) if queue.is_empty()) {
+				queues.events_by_method.remove(method);
+			}
+			event
+		}
+		None => queues.events_all.pop_front(),
+	}
+}
+
+fn json_id_key(value: &JsonValue) -> Option<String> {
+	match value.get("id")? {
+		JsonValue::Number(number) => Some(number.to_string()),
+		JsonValue::String(text) => Some(text.clone()),
+		JsonValue::Bool(flag) => Some(flag.to_string()),
+		JsonValue::Null => Some("null".to_string()),
+		other => Some(other.to_string()),
+	}
+}
+
+fn json_method_key(value: &JsonValue) -> Option<String> {
+	value.get("method")?.as_str().map(str::to_string)
 }
 
 fn configure_socket(websocket: &mut WebSocketStream) -> std::io::Result<()> {
@@ -373,6 +565,13 @@ fn set_read_timeout(stream: &mut MaybeTlsStream<TcpStream>, timeout: Option<Dura
 			ErrorKind::Unsupported,
 			"setting read timeout is not supported for this TLS backend",
 		)),
+	}
+}
+
+fn send_message(data: Vec<u8>) -> Message {
+	match String::from_utf8(data.clone()) {
+		Ok(text) => Message::Text(text.into()),
+		Err(_) => Message::Binary(data.into()),
 	}
 }
 
@@ -412,7 +611,6 @@ pub fn request_headers(headers: Option<Value>) -> Result<HashMap<String, String>
 					custom_headers.insert(k.to_string(), v.clone());
 				}
 			}
-
 			Value::List { vals: table, .. } => {
 				if table.len() == 1 {
 					match &table[0] {
@@ -421,7 +619,6 @@ pub fn request_headers(headers: Option<Value>) -> Result<HashMap<String, String>
 								custom_headers.insert(k.to_string(), v.clone());
 							}
 						}
-
 						x => {
 							return Err(ShellError::CantConvert {
 								to_type: "string list or single row".into(),
@@ -439,7 +636,6 @@ pub fn request_headers(headers: Option<Value>) -> Result<HashMap<String, String>
 					}
 				}
 			}
-
 			x => {
 				return Err(ShellError::CantConvert {
 					to_type: "string list or single row".into(),

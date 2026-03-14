@@ -69,6 +69,22 @@ ws recv cdp --max-time 2sec
 # Read the next message with metadata
 ws recv cdp --max-time 2sec --full
 
+# Send structured JSON from a Nushell record
+{
+  id: 1,
+  method: "Browser.getVersion",
+  params: {}
+} | ws send-json cdp
+
+# Read the next JSON message
+ws recv-json cdp --max-time 2sec
+
+# Wait for a specific JSON response id
+ws await cdp 1 --max-time 2sec
+
+# Read the next routed event, optionally filtering by method
+ws next-event cdp "Target.attachedToTarget" --max-time 2sec
+
 # List active sessions
 ws list
 
@@ -77,6 +93,8 @@ ws close cdp
 ```
 
 This is the mode to use for protocols like CDP that require one persistent WebSocket connection.
+
+`ws recv` exposes the raw message stream. `ws recv-json`, `ws await`, and `ws next-event` add JSON-aware routing on top of the same session so responses and async events can be consumed separately.
 
 ### Sending Messages
 

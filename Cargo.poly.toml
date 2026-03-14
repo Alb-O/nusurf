@@ -13,6 +13,7 @@ env_logger = true
 log = true
 nu-plugin = true
 nu-protocol = true
+serde_json = true
 tungstenite = { features = ["native-tls"] }
 url = true
 

@@ -1447,6 +1447,7 @@ dependencies = [
  "nu-plugin-test-support",
  "nu-protocol",
  "nu-test-support",
+ "serde_json",
  "tungstenite",
  "url",
 ]
