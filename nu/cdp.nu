@@ -11,6 +11,8 @@ export use cdp/browser.nu [
     "cdp browser find"
     "cdp browser wait"
     "cdp browser open"
+    "cdp browser start"
+    "cdp browser stop"
     "cdp browser args"
 ]
 

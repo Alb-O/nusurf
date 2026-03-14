@@ -19,6 +19,7 @@ use {
 	},
 	tungstenite::{
 		ClientRequestBuilder, Error as WsError, Message, WebSocket,
+		error::ProtocolError,
 		stream::{MaybeTlsStream, NoDelay},
 	},
 	url::Url,
@@ -424,6 +425,11 @@ fn spawn_worker_thread(
 						closed.store(true, Ordering::SeqCst);
 						return;
 					}
+					Err(WsError::Protocol(ProtocolError::ResetWithoutClosingHandshake)) => {
+						log::debug!("WebSocket peer reset without closing handshake");
+						closed.store(true, Ordering::SeqCst);
+						return;
+					}
 					Err(e) => {
 						log::error!("WebSocket read error: {e:?}");
 						closed.store(true, Ordering::SeqCst);
@@ -482,6 +488,12 @@ fn spawn_session_worker_thread(
 					}
 					Err(WsError::ConnectionClosed | WsError::AlreadyClosed) => {
 						log::debug!("WebSocket closed");
+						closed.store(true, Ordering::SeqCst);
+						mark_session_closed(&state, "WebSocket session is closed");
+						return;
+					}
+					Err(WsError::Protocol(ProtocolError::ResetWithoutClosingHandshake)) => {
+						log::debug!("WebSocket peer reset without closing handshake");
 						closed.store(true, Ordering::SeqCst);
 						mark_session_closed(&state, "WebSocket session is closed");
 						return;

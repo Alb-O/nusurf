@@ -127,11 +127,7 @@ export def "create-attached-page" [
 export def "close-browser" [
     browser_session: string # Browser websocket session name.
 ] {
-    try {
-        cdp close $browser_session | ignore
-    } catch {
-        null
-    }
+    try { cdp close $browser_session | ignore }
 }
 
 # Close a page target and its websocket session.
@@ -140,17 +136,8 @@ export def "close-page" [
     page_session: string # Page websocket session name.
     target_id: string # Target id to close in the browser session.
 ] {
-    try {
-        cdp call $browser_session "Target.closeTarget" { targetId: $target_id } | ignore
-    } catch {
-        null
-    }
-
-    try {
-        cdp close $page_session | ignore
-    } catch {
-        null
-    }
+    try { cdp call $browser_session "Target.closeTarget" { targetId: $target_id } | ignore }
+    try { cdp close $page_session | ignore }
 }
 
 # Detach an attached page session and close its target.
@@ -159,17 +146,8 @@ export def "close-attached-page" [
     attached_session: any # Attached session id or attached session record.
     target_id: string # Target id to close in the browser session.
 ] {
-    try {
-        cdp detach $browser_session $attached_session | ignore
-    } catch {
-        null
-    }
-
-    try {
-        cdp call $browser_session "Target.closeTarget" { targetId: $target_id } | ignore
-    } catch {
-        null
-    }
+    try { cdp detach $browser_session $attached_session | ignore }
+    try { cdp call $browser_session "Target.closeTarget" { targetId: $target_id } | ignore }
 }
 
 # Enable the common Page and Runtime domains for a session.

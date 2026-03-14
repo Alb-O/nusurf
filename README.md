@@ -70,18 +70,17 @@ ws next-event cdp "Target.attachedToTarget" --max-time 2sec
 The bundled `cdp` helpers smooth out the common browser workflow.
 
 ```bash
-# Wait for a DevTools target on the default port and open a stable session name
-cdp browser open
-
-# Or wait explicitly, then attach
-cdp browser wait 9222 --max-time 10sec
-cdp browser open 9222 --name browser
+# Launch a fresh browser, wait for DevTools, and get a reusable workflow record
+let browser = (cdp browser start)
 
 # Use the session immediately
-cdp call browser "Browser.getVersion"
+cdp call $browser.session "Browser.getVersion"
+
+# Clean up when done
+cdp browser stop $browser
 ```
 
-If you need to launch Chromium yourself first, `cdp browser find` locates a supported browser and `cdp browser args` builds sane remote-debugging flags. `cdp browser wait` removes the startup race by polling until DevTools is ready instead of failing immediately.
+If a browser is already running on the target port, `cdp browser start` will reuse it instead of launching a second one. `cdp browser find` and `cdp browser args` are still available when you want lower-level control, and `cdp browser wait` removes the startup race by polling until DevTools is ready instead of failing immediately.
 
 ## Development
 

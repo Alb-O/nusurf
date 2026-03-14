@@ -36,11 +36,7 @@ def wait-for-ws-url [target: any, max_time: duration, interval: duration] {
 
     loop {
         let ws_url = (
-            try {
-                resolve-ws-url $target
-            } catch {
-                null
-            }
+            try { resolve-ws-url $target }
         )
 
         if $ws_url != null {
@@ -57,6 +53,25 @@ def wait-for-ws-url [target: any, max_time: duration, interval: duration] {
         }
 
         sleep $interval
+    }
+}
+
+def open-or-reuse-browser-session [name: string, ws_url: string] {
+    let existing_session = (ws list | where id == $name | get -o 0)
+
+    if $existing_session == null {
+        return (ws open $ws_url --name $name)
+    }
+
+    if $existing_session.url == $ws_url {
+        return $existing_session
+    }
+
+    error make {
+        msg: (
+            $"Session ($name) is already open for ($existing_session.url). "
+            + $"Close it first or use a different --name for ($ws_url)."
+        )
     }
 }
 
@@ -233,7 +248,110 @@ export def "cdp browser open" [
     --max-time(-m): duration = 10sec # Maximum time to wait for the browser target.
     --interval(-i): duration = 100ms # Delay between discovery attempts.
 ] {
-    cdp open (wait-for-ws-url $target $max_time $interval) --name $name
+    open-or-reuse-browser-session $name (wait-for-ws-url $target $max_time $interval)
+}
+
+# Launch or attach to a browser and return a record agents can keep using.
+export def "cdp browser start" [
+    --browser(-b): string # Explicit browser path or command name to launch.
+    --port(-p): int = 9222 # Remote debugging port to attach on.
+    --name(-n): string = "browser" # Session name to register locally.
+    --headless(-h) = true # Launch Chromium headless by default.
+    --user-data-dir(-u): string # Browser profile directory; a temp dir is used by default.
+    --url: string = "about:blank" # Initial URL to open after launch.
+    --job-tag(-t): string # Background job tag for the launched browser process.
+    --max-time(-m): duration = 10sec # Maximum time to wait for the browser target.
+    --interval(-i): duration = 100ms # Delay between discovery attempts.
+] {
+    let existing_ws_url = (
+        try { resolve-ws-url $port }
+    )
+
+    if $existing_ws_url != null {
+        let session = (open-or-reuse-browser-session $name $existing_ws_url)
+
+        return {
+            launched: false
+            session: $session.id
+            url: $session.url
+            port: $port
+        }
+    }
+
+    let browser_path = (cdp browser find --browser $browser)
+    let profile_dir = if $user_data_dir == null {
+        mktemp -d
+    } else {
+        $user_data_dir | path expand
+    }
+    let args = (
+        cdp browser args --port $port --headless=$headless --user-data-dir $profile_dir --url $url
+    )
+    let launch_tag = ($job_tag | default $"cdp-browser-($port)")
+    let job_id = (
+        job spawn --tag $launch_tag {
+            run-external $browser_path ...$args | ignore
+        }
+    )
+    let ws_url = (wait-for-ws-url $port $max_time $interval)
+    let session = (open-or-reuse-browser-session $name $ws_url)
+
+    {
+        launched: true
+        browser: $browser_path
+        session: $session.id
+        url: $session.url
+        port: $port
+        jobId: $job_id
+        jobTag: $launch_tag
+        userDataDir: $profile_dir
+    }
+}
+
+# Close a started browser workflow record and clean up its local session state.
+export def "cdp browser stop" [
+    browser?: any # Record returned by `cdp browser start`, or a session name.
+    --session(-s): string # Explicit session name to close.
+    --job-id(-j): int # Background job id to kill.
+    --user-data-dir(-u): string # Profile directory to remove.
+] {
+    let session_name = if $session != null {
+        $session
+    } else if (($browser | describe) | str starts-with "record") {
+        $browser | get -o session
+    } else if $browser != null {
+        $browser | into string
+    } else {
+        "browser"
+    }
+    let job_to_kill = if $job_id != null {
+        $job_id
+    } else if (($browser | describe) | str starts-with "record") {
+        $browser | get -o jobId
+    } else {
+        null
+    }
+    let profile_dir = if $user_data_dir != null {
+        $user_data_dir
+    } else if (($browser | describe) | str starts-with "record") {
+        $browser | get -o userDataDir
+    } else {
+        null
+    }
+
+    if $session_name != null {
+        try { cdp call $session_name "Browser.close" | ignore }
+
+        try { ws close $session_name | ignore }
+    }
+
+    if $job_to_kill != null {
+        try { job kill $job_to_kill }
+    }
+
+    if (($profile_dir != null) and (($profile_dir | path exists))) {
+        rm -rf $profile_dir
+    }
 }
 
 # Build Chromium launch args with remote debugging enabled.
