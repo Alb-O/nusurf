@@ -71,6 +71,17 @@ export def "create-page" [browser_session: string, http_port: int, name: string]
     }
 }
 
+export def "create-attached-page" [browser_session: string, name: string] {
+    let target = (cdp call $browser_session "Target.createTarget" { url: "about:blank", background: true })
+    let attached = (cdp attach $browser_session $target.targetId)
+
+    {
+        session: $name
+        targetId: $target.targetId
+        attachedSessionId: $attached.sessionId
+    }
+}
+
 export def "close-page" [browser_session: string, page_session: string, target_id: string] {
     try {
         cdp call $browser_session "Target.closeTarget" { targetId: $target_id } | ignore
@@ -80,6 +91,20 @@ export def "close-page" [browser_session: string, page_session: string, target_i
 
     try {
         cdp close $page_session | ignore
+    } catch {
+        null
+    }
+}
+
+export def "close-attached-page" [browser_session: string, attached_session: any, target_id: string] {
+    try {
+        cdp detach $browser_session $attached_session | ignore
+    } catch {
+        null
+    }
+
+    try {
+        cdp call $browser_session "Target.closeTarget" { targetId: $target_id } | ignore
     } catch {
         null
     }

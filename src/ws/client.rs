@@ -219,9 +219,9 @@ impl SessionClient {
 
 	/// Wait for the next routed JSON event, optionally filtered by method name.
 	pub fn next_event(
-		&self, method: Option<&str>, timeout: Option<Duration>, signals: &Signals, span: Span,
+		&self, method: Option<&str>, session_id: Option<&str>, timeout: Option<Duration>, signals: &Signals, span: Span,
 	) -> Result<Option<JsonValue>, String> {
-		self.wait_for(timeout, signals, span, |queues| pop_event(queues, method))
+		self.wait_for(timeout, signals, span, |queues| pop_event(queues, method, session_id))
 	}
 
 	/// Close the persistent session.
@@ -550,19 +550,21 @@ fn pop_response(queues: &mut SessionQueues, id: &str) -> Option<JsonValue> {
 	response
 }
 
-fn pop_event(queues: &mut SessionQueues, method: Option<&str>) -> Option<JsonValue> {
+fn pop_event(queues: &mut SessionQueues, method: Option<&str>, session_id: Option<&str>) -> Option<JsonValue> {
 	match method {
 		Some(method) => {
-			let event = queues.events_by_method.get_mut(method)?.pop_front()?;
-			if matches!(queues.events_by_method.get(method), Some(queue) if queue.is_empty()) {
+			let event = pop_matching_event(queues.events_by_method.get_mut(method)?, session_id)?;
+			let method_queue_empty = matches!(queues.events_by_method.get(method), Some(queue) if queue.is_empty());
+			remove_matching_event(&mut queues.events_all, &event);
+
+			if method_queue_empty {
 				queues.events_by_method.remove(method);
 			}
 
-			remove_matching_event(&mut queues.events_all, &event);
 			Some(event)
 		}
 		None => {
-			let event = queues.events_all.pop_front()?;
+			let event = pop_matching_event(&mut queues.events_all, session_id)?;
 			let method = json_method_key(&event)?;
 			let empty_after_remove = if let Some(queue) = queues.events_by_method.get_mut(&method) {
 				remove_matching_event(queue, &event);
@@ -577,6 +579,18 @@ fn pop_event(queues: &mut SessionQueues, method: Option<&str>) -> Option<JsonVal
 
 			Some(event)
 		}
+	}
+}
+
+fn pop_matching_event(queue: &mut VecDeque<JsonValue>, session_id: Option<&str>) -> Option<JsonValue> {
+	match session_id {
+		Some(session_id) => {
+			let index = queue
+				.iter()
+				.position(|event| json_session_id_key(event).as_deref() == Some(session_id))?;
+			queue.remove(index)
+		}
+		None => queue.pop_front(),
 	}
 }
 
@@ -598,6 +612,10 @@ fn json_id_key(value: &JsonValue) -> Option<String> {
 
 fn json_method_key(value: &JsonValue) -> Option<String> {
 	value.get("method")?.as_str().map(str::to_string)
+}
+
+fn json_session_id_key(value: &JsonValue) -> Option<String> {
+	value.get("sessionId")?.as_str().map(str::to_string)
 }
 
 fn configure_socket(websocket: &mut WebSocketStream) -> std::io::Result<()> {

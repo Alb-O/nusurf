@@ -309,6 +309,15 @@ fn live_browser_nu_cdp_concurrent_targets() {
 }
 
 #[test]
+fn live_browser_nu_cdp_attached_sessions() {
+	let fixture = FixtureServer::new();
+
+	if let Err(err) = run_live_browser_script("cdp_live_browser_attached_sessions.nu", &[fixture.port().to_string()]) {
+		panic!("{err}");
+	}
+}
+
+#[test]
 fn live_browser_nu_cdp_disconnects() {
 	if let Err(err) = run_live_browser_script("cdp_live_browser_disconnect.nu", &[]) {
 		panic!("{err}");

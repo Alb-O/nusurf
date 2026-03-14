@@ -389,6 +389,12 @@ impl PluginCommand for WebSocketNextEvent {
 			.required("SESSION", SyntaxShape::String, "session id returned by `ws open`")
 			.optional("METHOD", SyntaxShape::String, "event method to filter on")
 			.named(
+				"session-id",
+				SyntaxShape::String,
+				"top-level JSON sessionId to filter on",
+				Some('s'),
+			)
+			.named(
 				"max-time",
 				SyntaxShape::Duration,
 				"max duration before timeout occurs",
@@ -402,11 +408,18 @@ impl PluginCommand for WebSocketNextEvent {
 	) -> Result<PipelineData, LabeledError> {
 		let session_id: String = call.req(0)?;
 		let method: Option<String> = call.opt(1)?;
+		let event_session_id: Option<String> = call.get_flag("session-id")?;
 		let timeout: Option<Value> = call.get_flag("max-time")?;
 		let client = session_client(&session_id)?;
 		let timeout = parse_timeout(timeout)?;
 
-		let value = match client.next_event(method.as_deref(), timeout, &engine.signals().clone(), call.head) {
+		let value = match client.next_event(
+			method.as_deref(),
+			event_session_id.as_deref(),
+			timeout,
+			&engine.signals().clone(),
+			call.head,
+		) {
 			Ok(Some(json)) => json_to_nu_value(json, call.head),
 			Ok(None) => Value::nothing(call.head),
 			Err(err) => return Err(LabeledError::new(err)),

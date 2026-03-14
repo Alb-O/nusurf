@@ -84,6 +84,49 @@ def resolve-ws-url [target: any] {
     }
 }
 
+def resolve-target-id [target: any] {
+    let target_type = ($target | describe)
+
+    if $target_type == "string" {
+        return $target
+    }
+
+    if ($target_type | str starts-with "record") {
+        let target_id = ($target | get -o targetId)
+        if (not (is-nothing $target_id)) {
+            return $target_id
+        }
+
+        let id = ($target | get -o id)
+        if (not (is-nothing $id)) {
+            return $id
+        }
+    }
+
+    error make {
+        msg: $"Unsupported CDP target identifier type: ($target_type)"
+    }
+}
+
+def resolve-session-id [session: any] {
+    let session_type = ($session | describe)
+
+    if $session_type == "string" {
+        return $session
+    }
+
+    if ($session_type | str starts-with "record") {
+        let session_id = ($session | get -o sessionId)
+        if (not (is-nothing $session_id)) {
+            return $session_id
+        }
+    }
+
+    error make {
+        msg: $"Unsupported CDP session identifier type: ($session_type)"
+    }
+}
+
 def next-event-once [session: string, method: any, timeout: duration] {
     if (is-nothing $method) {
         ws next-event $session --max-time $timeout
@@ -162,30 +205,37 @@ export def "cdp event" [
     --session-id(-s): string
     --max-time(-m): duration = 30sec
 ] {
-    let deadline = (date now) + $max_time
-
-    loop {
-        let remaining = ($deadline - (date now))
-
-        if $remaining <= 0sec {
-            return null
-        }
-
-        let event = (next-event-once $session $method $remaining)
-
-        if (is-nothing $event) {
-            return null
-        }
-
-        if (is-nothing $session_id) {
-            return $event
-        }
-
-        let event_session_id = ($event | get -o sessionId)
-        if $event_session_id == $session_id {
-            return $event
+    if (is-nothing $session_id) {
+        next-event-once $session $method $max_time
+    } else {
+        if (is-nothing $method) {
+            ws next-event $session --session-id $session_id --max-time $max_time
+        } else {
+            ws next-event $session $method --session-id $session_id --max-time $max_time
         }
     }
+}
+
+export def "cdp attach" [
+    session: string
+    target: any
+    --flatten(-f) = true
+    --max-time(-m): duration = 30sec
+] {
+    cdp call $session "Target.attachToTarget" {
+        targetId: (resolve-target-id $target)
+        flatten: $flatten
+    } --max-time $max_time
+}
+
+export def "cdp detach" [
+    session: string
+    attached_session: any
+    --max-time(-m): duration = 30sec
+] {
+    cdp call $session "Target.detachFromTarget" {
+        sessionId: (resolve-session-id $attached_session)
+    } --max-time $max_time
 }
 
 export def "cdp close" [session: string] {

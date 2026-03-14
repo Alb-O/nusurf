@@ -78,6 +78,17 @@ fn handle_cdp_websocket(ws_stream: &mut WebSocket<TcpStream>) {
 						"method": method,
 					}
 				});
+				let event = if let Some(session_id) = request
+					.get("params")
+					.and_then(|params| params.get("sessionId"))
+					.and_then(JsonValue::as_str)
+				{
+					let mut event = event;
+					event["sessionId"] = JsonValue::String(session_id.to_string());
+					event
+				} else {
+					event
+				};
 				if ws_stream.send(Message::Text(event.to_string().into())).is_err() {
 					break;
 				}
