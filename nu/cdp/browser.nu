@@ -3,27 +3,23 @@ use common.nu *
 def json-version-url [target: any] {
     let target_type = ($target | describe)
 
-    match $target_type {
-        "int" => $"http://127.0.0.1:($target)/json/version"
-        "string" => {
-            if ($target | str ends-with "/json/version") {
-                return $target
-            }
+    if $target_type == "int" {
+        return $"http://127.0.0.1:($target)/json/version"
+    }
 
-            if (($target | str starts-with "http://") or ($target | str starts-with "https://")) {
-                let trimmed = ($target | str trim -r -c "/")
-                return $"($trimmed)/json/version"
-            }
+    if $target_type == "string" {
+        if ($target | str ends-with "/json/version") {
+            return $target
+        }
 
-            error make {
-                msg: $"Unsupported CDP discovery target type: ($target_type)"
-            }
+        if (($target | str starts-with "http://") or ($target | str starts-with "https://")) {
+            let trimmed = ($target | str trim -r -c "/")
+            return $"($trimmed)/json/version"
         }
-        _ => {
-            error make {
-                msg: $"Unsupported CDP discovery target type: ($target_type)"
-            }
-        }
+    }
+
+    error make {
+        msg: $"Unsupported CDP discovery target type: ($target_type)"
     }
 }
 
@@ -79,33 +75,30 @@ export def resolve-ws-url [
 ] {
     let target_type = ($target | describe)
 
-    match $target_type {
-        "int" => (http-ws-url $target)
-        "string" => {
-            if (($target | str starts-with "ws://") or ($target | str starts-with "wss://")) {
-                return $target
-            }
+    if $target_type == "int" {
+        return (http-ws-url $target)
+    }
 
-            if (
-                ($target | str starts-with "http://")
-                or ($target | str starts-with "https://")
-                or ($target | str ends-with "/json/version")
-            ) {
-                return (http-ws-url $target)
-            }
+    if $target_type == "string" {
+        if (($target | str starts-with "ws://") or ($target | str starts-with "wss://")) {
+            return $target
+        }
 
-            error make {
-                msg: $"Unsupported CDP target type: ($target_type)"
-            }
+        if (
+            ($target | str starts-with "http://")
+            or ($target | str starts-with "https://")
+            or ($target | str ends-with "/json/version")
+        ) {
+            return (http-ws-url $target)
         }
-        $record_type if ($record_type | str starts-with "record") => {
-            ws-url-from-version-info $target $target
-        }
-        _ => {
-            error make {
-                msg: $"Unsupported CDP target type: ($target_type)"
-            }
-        }
+    }
+
+    if ($target_type | str starts-with "record") {
+        return (ws-url-from-version-info $target $target)
+    }
+
+    error make {
+        msg: $"Unsupported CDP target type: ($target_type)"
     }
 }
 
