@@ -122,7 +122,14 @@ def completion-results [entries: list<any>] {
             | each {|entry|
                 {
                     value: $entry.qualified
-                    description: ($entry | get -o description | default "")
+                    description: (
+                        # Upstream protocol descriptions contain hard-wrapped newlines (including mid-sentence). Flatten to one line.
+                        $entry
+                        | get -o description
+                        | default ""
+                        | str replace -a "\n" " "
+                        | str trim
+                    )
                 }
             }
         )
