@@ -3,7 +3,7 @@ use {
 	serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue},
 };
 
-pub fn pipeline_input_to_bytes(
+pub(super) fn pipeline_input_to_bytes(
 	input: PipelineData, span: nu_protocol::Span, require_input: bool,
 ) -> Result<Option<Vec<u8>>, LabeledError> {
 	match input {
@@ -21,7 +21,7 @@ pub fn pipeline_input_to_bytes(
 	}
 }
 
-pub fn pipeline_input_to_json(input: PipelineData, span: nu_protocol::Span) -> Result<JsonValue, LabeledError> {
+pub(super) fn pipeline_input_to_json(input: PipelineData, span: nu_protocol::Span) -> Result<JsonValue, LabeledError> {
 	match input {
 		PipelineData::Value(value, ..) => value_to_json(value),
 		PipelineData::ListStream(stream, ..) => stream.into_value().map_err(LabeledError::from).and_then(value_to_json),
@@ -35,7 +35,7 @@ pub fn pipeline_input_to_json(input: PipelineData, span: nu_protocol::Span) -> R
 	}
 }
 
-pub fn value_to_json(value: Value) -> Result<JsonValue, LabeledError> {
+pub(super) fn value_to_json(value: Value) -> Result<JsonValue, LabeledError> {
 	match value {
 		Value::Nothing { .. } => Ok(JsonValue::Null),
 		Value::Bool { val, .. } => Ok(JsonValue::Bool(val)),
@@ -65,7 +65,7 @@ pub fn value_to_json(value: Value) -> Result<JsonValue, LabeledError> {
 	}
 }
 
-pub fn value_to_id_key(value: &Value) -> Result<String, LabeledError> {
+pub(super) fn value_to_id_key(value: &Value) -> Result<String, LabeledError> {
 	match value {
 		Value::Int { val, .. } => Ok(val.to_string()),
 		Value::String { val, .. } => Ok(val.clone()),
@@ -78,7 +78,7 @@ pub fn value_to_id_key(value: &Value) -> Result<String, LabeledError> {
 	}
 }
 
-pub fn json_to_nu_value(value: JsonValue, span: nu_protocol::Span) -> Value {
+pub(super) fn json_to_nu_value(value: JsonValue, span: nu_protocol::Span) -> Value {
 	match value {
 		JsonValue::Null => Value::nothing(span),
 		JsonValue::Bool(val) => Value::bool(val, span),

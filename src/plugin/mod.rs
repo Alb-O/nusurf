@@ -3,10 +3,12 @@ mod convert;
 mod registry;
 mod shared;
 
-use nu_plugin::{Plugin, PluginCommand};
+use {
+	self::commands::all_commands,
+	nu_plugin::{Plugin, PluginCommand},
+};
 
-pub use self::commands::all_commands;
-
+/// Nushell plugin implementation for the `ws` command family.
 pub struct WebSocketPlugin;
 
 impl Plugin for WebSocketPlugin {

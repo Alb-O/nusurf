@@ -35,23 +35,32 @@ enum ControlMessage {
 }
 
 #[derive(Clone, Debug)]
+/// A single WebSocket frame payload exposed to Nushell callers.
 pub enum ReceivedMessage {
+	/// UTF-8 text frame contents.
 	Text(String),
+	/// Raw binary frame contents.
 	Binary(Vec<u8>),
 }
 
 #[derive(Clone)]
+/// Cloneable sender-side handle for a running WebSocket worker thread.
 pub struct SessionHandle {
 	tx: mpsc::SyncSender<ControlMessage>,
 	closed: Arc<AtomicBool>,
 }
 
 #[derive(Clone)]
+/// High-level API for a persistent WebSocket session with routed JSON queues.
 pub struct SessionClient {
 	handle: SessionHandle,
 	state: SharedSessionState,
 }
 
+/// Streaming reader used by the one-shot `ws` command.
+///
+/// Incoming frames are buffered as newline-delimited chunks so Nushell can
+/// consume the socket through its standard byte-stream interface.
 pub struct WebSocketClient {
 	rx: Receiver<ReceivedMessage>,
 	deadline: Option<Instant>,
@@ -74,6 +83,7 @@ enum ControlFlow {
 }
 
 impl WebSocketClient {
+	/// Create a byte-stream adapter over a worker thread receiver.
 	pub fn new(rx: Receiver<ReceivedMessage>, timeout: Option<Duration>, signals: Signals, span: Span) -> Self {
 		let mut client = Self {
 			rx,
@@ -91,6 +101,8 @@ impl WebSocketClient {
 	fn enqueue_message(&mut self, message: ReceivedMessage) {
 		match message {
 			ReceivedMessage::Text(text) => {
+				// Preserve frame boundaries in the byte stream without inventing a
+				// structured protocol: each frame is emitted as one newline-terminated chunk.
 				self.buf_deque.extend(text.bytes());
 				self.buf_deque.push_back(b'\n');
 			}
@@ -153,6 +165,7 @@ impl Read for WebSocketClient {
 }
 
 impl SessionHandle {
+	/// Queue a frame to be written by the worker thread.
 	pub fn send(&self, data: Vec<u8>) -> Result<(), String> {
 		if self.closed.load(Ordering::SeqCst) {
 			return Err("WebSocket session is closed".to_string());
@@ -163,6 +176,7 @@ impl SessionHandle {
 			.map_err(|_| "WebSocket worker is no longer running".to_string())
 	}
 
+	/// Request an orderly shutdown of the worker thread and socket.
 	pub fn close(&self) -> Result<(), String> {
 		self.closed.store(true, Ordering::SeqCst);
 		let _ = self.tx.send(ControlMessage::Close);
@@ -171,16 +185,19 @@ impl SessionHandle {
 }
 
 impl SessionClient {
+	/// Send a raw WebSocket frame on the persistent session.
 	pub fn send(&self, data: Vec<u8>) -> Result<(), String> {
 		self.handle.send(data)
 	}
 
+	/// Receive the next raw frame from the session's FIFO queue.
 	pub fn recv_raw(
 		&self, timeout: Option<Duration>, signals: &Signals, span: Span,
 	) -> Result<Option<ReceivedMessage>, String> {
 		self.wait_for(timeout, signals, span, |queues| queues.raw_messages.pop_front())
 	}
 
+	/// Receive the next raw frame and parse it as JSON text.
 	pub fn recv_json(
 		&self, timeout: Option<Duration>, signals: &Signals, span: Span,
 	) -> Result<Option<JsonValue>, String> {
@@ -193,18 +210,21 @@ impl SessionClient {
 		}
 	}
 
+	/// Wait for the next routed JSON response matching the given `id`.
 	pub fn await_response(
 		&self, id: &str, timeout: Option<Duration>, signals: &Signals, span: Span,
 	) -> Result<Option<JsonValue>, String> {
 		self.wait_for(timeout, signals, span, |queues| pop_response(queues, id))
 	}
 
+	/// Wait for the next routed JSON event, optionally filtered by method name.
 	pub fn next_event(
 		&self, method: Option<&str>, timeout: Option<Duration>, signals: &Signals, span: Span,
 	) -> Result<Option<JsonValue>, String> {
 		self.wait_for(timeout, signals, span, |queues| pop_event(queues, method))
 	}
 
+	/// Close the persistent session.
 	pub fn close(&self) -> Result<(), String> {
 		self.handle.close()
 	}
@@ -239,6 +259,8 @@ impl SessionClient {
 				None => SOCKET_POLL_INTERVAL,
 			};
 
+			// Wake periodically instead of blocking forever so interrupt signals and
+			// timeouts are observed even when no new socket traffic arrives.
 			let (new_queues, _) = condvar
 				.wait_timeout(queues, wait_time)
 				.map_err(|_| "Failed to wait for WebSocket session state".to_string())?;
@@ -247,6 +269,7 @@ impl SessionClient {
 	}
 }
 
+/// Open a one-shot WebSocket connection suitable for the streaming `ws` command.
 pub fn connect(
 	url: Url, timeout: Option<Duration>, headers: HashMap<String, String>, signals: Signals, span: Span,
 ) -> Option<(WebSocketClient, SessionHandle)> {
@@ -256,6 +279,7 @@ pub fn connect(
 	Some((WebSocketClient::new(rx, timeout, signals, span), handle))
 }
 
+/// Open a persistent WebSocket session with routed JSON response and event queues.
 pub fn connect_session(url: Url, headers: HashMap<String, String>) -> Option<SessionClient> {
 	let websocket = open_websocket(url, headers)?;
 	let (tx, state, closed) = connect_session_components(websocket)?;
@@ -498,6 +522,8 @@ fn enqueue_session_message(state: &SharedSessionState, message: ReceivedMessage)
 			if let Some(id) = json_id_key(&json) {
 				queues.responses_by_id.entry(id).or_default().push_back(json);
 			} else if let Some(method) = json_method_key(&json) {
+				// Keep both a global event queue and per-method queues so consumers can
+				// mix filtered and unfiltered reads without reclassifying messages later.
 				queues.events_all.push_back(json.clone());
 				queues.events_by_method.entry(method).or_default().push_back(json);
 			}
@@ -583,6 +609,10 @@ fn normal_close(reason: &'static str) -> tungstenite::protocol::CloseFrame {
 }
 
 #[allow(clippy::result_large_err)]
+/// Parse a Nushell URL argument into both its original string form and a `Url`.
+///
+/// The original string is returned because session metadata wants the exact
+/// caller-provided text, not a normalized serialization from `Url`.
 pub fn http_parse_url(call: &EvaluatedCall, span: Span, raw_url: Value) -> Result<(String, Url), ShellError> {
 	let requested_url = raw_url.coerce_into_string()?;
 	let url = match Url::parse(&requested_url) {
@@ -601,6 +631,7 @@ pub fn http_parse_url(call: &EvaluatedCall, span: Span, raw_url: Value) -> Resul
 }
 
 #[allow(clippy::result_large_err)]
+/// Normalize a Nushell record or single-row table into HTTP header pairs.
 pub fn request_headers(headers: Option<Value>) -> Result<HashMap<String, String>, ShellError> {
 	let mut custom_headers: HashMap<String, Value> = HashMap::new();
 

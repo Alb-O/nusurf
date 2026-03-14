@@ -12,7 +12,7 @@ use {
 	},
 };
 
-pub fn all_commands() -> Vec<Box<dyn PluginCommand<Plugin = WebSocketPlugin>>> {
+pub(super) fn all_commands() -> Vec<Box<dyn PluginCommand<Plugin = WebSocketPlugin>>> {
 	vec![
 		Box::new(WebSocket),
 		Box::new(WebSocketOpen),
@@ -27,16 +27,16 @@ pub fn all_commands() -> Vec<Box<dyn PluginCommand<Plugin = WebSocketPlugin>>> {
 	]
 }
 
-pub struct WebSocket;
-pub struct WebSocketOpen;
-pub struct WebSocketSend;
-pub struct WebSocketRecv;
-pub struct WebSocketSendJson;
-pub struct WebSocketRecvJson;
-pub struct WebSocketAwait;
-pub struct WebSocketNextEvent;
-pub struct WebSocketClose;
-pub struct WebSocketList;
+struct WebSocket;
+struct WebSocketOpen;
+struct WebSocketSend;
+struct WebSocketRecv;
+struct WebSocketSendJson;
+struct WebSocketRecvJson;
+struct WebSocketAwait;
+struct WebSocketNextEvent;
+struct WebSocketClose;
+struct WebSocketList;
 
 impl PluginCommand for WebSocket {
 	type Plugin = WebSocketPlugin;
