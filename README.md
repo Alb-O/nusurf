@@ -65,6 +65,24 @@ ws next-event cdp "Target.attachedToTarget" --max-time 2sec
 
 `ws recv` exposes the raw message stream. `ws recv-json`, `ws await`, and `ws next-event` sit on top of the same session and separate JSON responses from async events.
 
+### CDP browser sessions
+
+The bundled `cdp` helpers smooth out the common browser workflow.
+
+```bash
+# Wait for a DevTools target on the default port and open a stable session name
+cdp browser open
+
+# Or wait explicitly, then attach
+cdp browser wait 9222 --max-time 10sec
+cdp browser open 9222 --name browser
+
+# Use the session immediately
+cdp call browser "Browser.getVersion"
+```
+
+If you need to launch Chromium yourself first, `cdp browser find` locates a supported browser and `cdp browser args` builds sane remote-debugging flags. `cdp browser wait` removes the startup race by polling until DevTools is ready instead of failing immediately.
+
 ## Development
 
 Refresh the committed CDP schema artifact with:

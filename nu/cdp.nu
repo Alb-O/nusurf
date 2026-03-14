@@ -9,6 +9,8 @@ use cdp/session.nu [complete-cdp-session]
 export use cdp/browser.nu [
     "cdp discover"
     "cdp browser find"
+    "cdp browser wait"
+    "cdp browser open"
     "cdp browser args"
 ]
 

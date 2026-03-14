@@ -31,6 +31,35 @@ def http-ws-url [target: any] {
     ws-url-from-version-info $target (http get (json-version-url $target))
 }
 
+def wait-for-ws-url [target: any, max_time: duration, interval: duration] {
+    let deadline = (date now) + $max_time
+
+    loop {
+        let ws_url = (
+            try {
+                resolve-ws-url $target
+            } catch {
+                null
+            }
+        )
+
+        if $ws_url != null {
+            return $ws_url
+        }
+
+        if ((date now) >= $deadline) {
+            error make {
+                msg: (
+                    $"Timed out waiting for a CDP target at ($target | into string). "
+                    + "Launch a browser with remote debugging enabled or pass an existing DevTools URL."
+                )
+            }
+        }
+
+        sleep $interval
+    }
+}
+
 # Resolve an HTTP discovery target, websocket URL, or version record to a CDP websocket URL.
 export def resolve-ws-url [
     target: any # Browser port, discovery URL, websocket URL, or version record.
@@ -186,6 +215,25 @@ export def "cdp browser find" [
     }
 
     $path
+}
+
+# Wait for a browser target to expose a DevTools websocket URL.
+export def "cdp browser wait" [
+    target: any = 9222 # Browser port, discovery URL, websocket URL, or version record.
+    --max-time(-m): duration = 10sec # Maximum time to wait for the browser target.
+    --interval(-i): duration = 100ms # Delay between discovery attempts.
+] {
+    wait-for-ws-url $target $max_time $interval
+}
+
+# Wait for a browser target and open a stable websocket session to it.
+export def "cdp browser open" [
+    target: any = 9222 # Browser port, discovery URL, websocket URL, or version record.
+    --name(-n): string = "browser" # Session name to register locally.
+    --max-time(-m): duration = 10sec # Maximum time to wait for the browser target.
+    --interval(-i): duration = 100ms # Delay between discovery attempts.
+] {
+    cdp open (wait-for-ws-url $target $max_time $interval) --name $name
 }
 
 # Build Chromium launch args with remote debugging enabled.
