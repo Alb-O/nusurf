@@ -1,5 +1,10 @@
 use std/assert
 use cdp.nu *
+use cdp/schema.nu [
+    complete-cdp-command
+    complete-cdp-domain
+    complete-cdp-event
+]
 
 def main [] {
     let domains = (cdp schema domains)
@@ -31,4 +36,13 @@ def main [] {
 
     let all_matches = (cdp schema search "session")
     assert (($all_matches | where qualified == "Target.SessionID" and kind == "type" | length) == 1)
+
+    let domain_completions = (complete-cdp-domain "cdp schema commands Pa")
+    assert (($domain_completions.completions | where value == "Page" | length) == 1)
+
+    let command_completions = (complete-cdp-command "cdp call browser Runtime.eva")
+    assert (($command_completions.completions | where value == "Runtime.evaluate" | length) == 1)
+
+    let event_completions = (complete-cdp-event "cdp event browser Page.loa")
+    assert (($event_completions.completions | where value == "Page.loadEventFired" | length) == 1)
 }
