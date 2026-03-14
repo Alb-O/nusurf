@@ -1,7 +1,7 @@
-# nu_plugin_ws
+# nu-plugin-ws
 
-[![Crates.io Version](https://img.shields.io/crates/v/nu_plugin_ws?color=blue)](https://crates.io/crates/nu_plugin_ws)
-[![Nushell](https://img.shields.io/badge/Nushell-v0.107.0-blue)](https://nushell.sh)
+[![Crates.io Version](https://img.shields.io/crates/v/nu-plugin-ws?color=blue)](https://crates.io/crates/nu-plugin-ws)
+[![Nushell](https://img.shields.io/badge/Nushell-v0.111.0-blue)](https://nushell.sh)
 
 A plugin for [Nushell](https://nushell.sh), a cross-platform shell and scripting language. This plugin adds support for
 streaming from a websocket.
@@ -10,13 +10,13 @@ streaming from a websocket.
 
 ### Cargo
 
-Get the latest version from [crates.io](https://crates.io/crates/nu_plugin_ws) with a local install:
+Get the latest version from [crates.io](https://crates.io/crates/nu-plugin-ws) with a local install:
 
 ```bash
 # Downloads and installs the plugin
-cargo install nu_plugin_ws
+cargo install nu-plugin-ws
 # Registers the plugin with Nushell
-plugin add ~/.cargo/bin/nu_plugin_ws
+plugin add ~/.cargo/bin/nu-plugin-ws
 # Activates the plugin
 plugin use ws
 ```
@@ -27,13 +27,13 @@ Manual builds can also be used:
 
 ```bash
 # Clone the repository
-git clone https://github.com/alex-kattathra-johnson/nu_plugin_ws.git
+git clone https://github.com/alex-kattathra-johnson/nu_plugin_ws.git nu-plugin-ws
 # Enter the repo folder
-cd nu_plugin_ws
+cd nu-plugin-ws
 # Build a release version of the plugin
 cargo build -r
 # Registers the plugin with Nushell
-plugin add target/release/nu_plugin_ws
+plugin add target/release/nu-plugin-ws
 # Activates the plugin
 plugin use ws
 ```
@@ -189,12 +189,12 @@ loop {
 
 ## Development
 
-This project uses pre-commit hooks to ensure code quality. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions.
+This project uses the polyrepo Rust environment with a managed Cargo manifest.
 
 Quick setup:
+
 ```bash
-# Install pre-commit
-pip install pre-commit
-# Install the git hooks
-pre-commit install
+devenv shell
+cargo check --all-targets --all-features
+cargo test --all-targets --all-features
 ```

@@ -1,0 +1,21 @@
+[package]
+authors = ["Alex Johnson <alex.kattathra.johnson@gmail.com>"]
+repository = "https://github.com/alex-kattathra-johnson/nu_plugin_ws"
+readme = "README.md"
+license = "MIT"
+name = "nu-plugin-ws"
+description = "A Nushell plugin for easily streaming output from websocket endpoints"
+version = "1.0.6"
+edition = "2024"
+
+[dependencies]
+env_logger = true
+log = true
+nu-plugin = true
+nu-protocol = true
+tungstenite = { features = ["native-tls"] }
+url = true
+
+[dev-dependencies]
+nu-plugin-test-support = true
+nu-test-support = true
