@@ -35,58 +35,58 @@ export def complete-cdp-session [
 def resolve-target-id [target: any] {
     let target_type = ($target | describe)
 
-    if $target_type == "string" {
-        return $target
-    }
+    match $target_type {
+        "string" => $target
+        $record_type if ($record_type | str starts-with "record") => {
+            let target_id = (
+                $target
+                | get -o targetId id
+                | compact
+                | first
+            )
 
-    if ($target_type | str starts-with "record") {
-        let target_id = (
-            $target
-            | get -o targetId id
-            | compact
-            | first
-        )
+            if $target_id != null {
+                return $target_id
+            }
 
-        if $target_id != null {
-            return $target_id
+            error make {
+                msg: $"Unsupported CDP target identifier type: ($target_type)"
+            }
         }
-    }
-
-    error make {
-        msg: $"Unsupported CDP target identifier type: ($target_type)"
+        _ => {
+            error make {
+                msg: $"Unsupported CDP target identifier type: ($target_type)"
+            }
+        }
     }
 }
 
 def resolve-session-id [session: any] {
     let session_type = ($session | describe)
 
-    if $session_type == "string" {
-        return $session
-    }
+    match $session_type {
+        "string" => $session
+        $record_type if ($record_type | str starts-with "record") => {
+            let session_id = (
+                $session
+                | get -o sessionId
+                | compact
+                | first
+            )
 
-    if ($session_type | str starts-with "record") {
-        let session_id = (
-            $session
-            | get -o sessionId
-            | compact
-            | first
-        )
+            if $session_id != null {
+                return $session_id
+            }
 
-        if $session_id != null {
-            return $session_id
+            error make {
+                msg: $"Unsupported CDP session identifier type: ($session_type)"
+            }
         }
-    }
-
-    error make {
-        msg: $"Unsupported CDP session identifier type: ($session_type)"
-    }
-}
-
-def next-event-once [session: string, method: any, timeout: duration] {
-    if $method == null {
-        ws next-event $session --max-time $timeout
-    } else {
-        ws next-event $session $method --max-time $timeout
+        _ => {
+            error make {
+                msg: $"Unsupported CDP session identifier type: ($session_type)"
+            }
+        }
     }
 }
 
@@ -163,12 +163,11 @@ export def "cdp event" [
         validate-event-input $method
     }
 
-    if $session_id == null {
-        next-event-once $session $method $max_time
-    } else if $method == null {
-        ws next-event $session --session-id $session_id --max-time $max_time
-    } else {
-        ws next-event $session $method --session-id $session_id --max-time $max_time
+    match [$session_id $method] {
+        [null null] => (ws next-event $session --max-time $max_time)
+        [null _] => (ws next-event $session $method --max-time $max_time)
+        [_ null] => (ws next-event $session --session-id $session_id --max-time $max_time)
+        _ => (ws next-event $session $method --session-id $session_id --max-time $max_time)
     }
 }
 

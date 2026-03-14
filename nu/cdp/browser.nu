@@ -3,34 +3,28 @@ use common.nu *
 def json-version-url [target: any] {
     let target_type = ($target | describe)
 
-    if $target_type == "int" {
-        return $"http://127.0.0.1:($target)/json/version"
-    }
+    match $target_type {
+        "int" => $"http://127.0.0.1:($target)/json/version"
+        "string" => {
+            if ($target | str ends-with "/json/version") {
+                return $target
+            }
 
-    if $target_type == "string" {
-        if ($target | str ends-with "/json/version") {
-            return $target
+            if (($target | str starts-with "http://") or ($target | str starts-with "https://")) {
+                let trimmed = ($target | str trim -r -c "/")
+                return $"($trimmed)/json/version"
+            }
+
+            error make {
+                msg: $"Unsupported CDP discovery target type: ($target_type)"
+            }
         }
-
-        if (($target | str starts-with "http://") or ($target | str starts-with "https://")) {
-            let trimmed = ($target | str trim -r -c "/")
-            return $"($trimmed)/json/version"
+        _ => {
+            error make {
+                msg: $"Unsupported CDP discovery target type: ($target_type)"
+            }
         }
     }
-
-    error make {
-        msg: $"Unsupported CDP discovery target type: ($target_type)"
-    }
-}
-
-def ws-url-from-version-info [target: any, info: record] {
-    let ws_url = ($info | get -o webSocketDebuggerUrl)
-
-    if $ws_url == null {
-        error make { msg: $"No webSocketDebuggerUrl in ($target | into string)" }
-    }
-
-    $ws_url
 }
 
 def http-ws-url [target: any] {
@@ -43,31 +37,44 @@ export def resolve-ws-url [
 ] {
     let target_type = ($target | describe)
 
-    if $target_type == "int" {
-        return (http-ws-url $target)
-    }
+    match $target_type {
+        "int" => (http-ws-url $target)
+        "string" => {
+            if (($target | str starts-with "ws://") or ($target | str starts-with "wss://")) {
+                return $target
+            }
 
-    if $target_type == "string" {
-        if (($target | str starts-with "ws://") or ($target | str starts-with "wss://")) {
-            return $target
+            if (
+                ($target | str starts-with "http://")
+                or ($target | str starts-with "https://")
+                or ($target | str ends-with "/json/version")
+            ) {
+                return (http-ws-url $target)
+            }
+
+            error make {
+                msg: $"Unsupported CDP target type: ($target_type)"
+            }
         }
-
-        if (
-            ($target | str starts-with "http://")
-            or ($target | str starts-with "https://")
-            or ($target | str ends-with "/json/version")
-        ) {
-            return (http-ws-url $target)
+        $record_type if ($record_type | str starts-with "record") => {
+            ws-url-from-version-info $target $target
+        }
+        _ => {
+            error make {
+                msg: $"Unsupported CDP target type: ($target_type)"
+            }
         }
     }
+}
 
-    if ($target_type | str starts-with "record") {
-        return (ws-url-from-version-info $target $target)
+def ws-url-from-version-info [target: any, info: record] {
+    let ws_url = ($info | get -o webSocketDebuggerUrl)
+
+    if $ws_url == null {
+        error make { msg: $"No webSocketDebuggerUrl in ($target | into string)" }
     }
 
-    error make {
-        msg: $"Unsupported CDP target type: ($target_type)"
-    }
+    $ws_url
 }
 
 def browser-env-candidate [name: string] {

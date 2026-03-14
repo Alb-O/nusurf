@@ -62,17 +62,14 @@ export def "wait-for-target-ws" [
     let deadline = (date now) + $max_time
 
     loop {
-        let target = (
+        let ws_url = (
             http get $"http://127.0.0.1:($http_port)/json/list"
             | where id == $target_id
-            | get -o 0
+            | get -o 0.webSocketDebuggerUrl
         )
 
-        if (not (is nothing $target)) {
-            let ws_url = ($target | get -o webSocketDebuggerUrl)
-            if (not (is nothing $ws_url)) {
-                return $ws_url
-            }
+        if (not (is nothing $ws_url)) {
+            return $ws_url
         }
 
         if ((date now) >= $deadline) {
