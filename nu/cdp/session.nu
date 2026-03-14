@@ -11,7 +11,7 @@ use schema.nu [
 export def complete-cdp-session [
     context: string # Current commandline context.
 ] {
-    let prefix = ($context | split words | last | default "" | str downcase)
+    let needle = ($context | split words | last | default "" | str downcase)
 
     {
         options: {
@@ -21,7 +21,7 @@ export def complete-cdp-session [
         }
         completions: (
             ws list
-            | where {|entry| ($entry.id | str downcase | str contains $prefix) }
+            | where {|entry| ($entry.id | str downcase | str contains $needle) }
             | each {|entry|
                 {
                     value: $entry.id
@@ -32,18 +32,6 @@ export def complete-cdp-session [
     }
 }
 
-def record-first [value: record, columns: list<string>] {
-    for column in $columns {
-        let match = ($value | get -o $column)
-
-        if (not (is-nothing $match)) {
-            return $match
-        }
-    }
-
-    null
-}
-
 def resolve-target-id [target: any] {
     let target_type = ($target | describe)
 
@@ -52,9 +40,14 @@ def resolve-target-id [target: any] {
     }
 
     if ($target_type | str starts-with "record") {
-        let target_id = (record-first $target ["targetId", "id"])
+        let target_id = (
+            $target
+            | get -o targetId id
+            | where {|value| $value != null }
+            | get -o 0
+        )
 
-        if (not (is-nothing $target_id)) {
+        if $target_id != null {
             return $target_id
         }
     }
@@ -72,9 +65,14 @@ def resolve-session-id [session: any] {
     }
 
     if ($session_type | str starts-with "record") {
-        let session_id = (record-first $session ["sessionId"])
+        let session_id = (
+            $session
+            | get -o sessionId
+            | where {|value| $value != null }
+            | get -o 0
+        )
 
-        if (not (is-nothing $session_id)) {
+        if $session_id != null {
             return $session_id
         }
     }
@@ -85,7 +83,7 @@ def resolve-session-id [session: any] {
 }
 
 def next-event-once [session: string, method: any, timeout: duration] {
-    if (is-nothing $method) {
+    if $method == null {
         ws next-event $session --max-time $timeout
     } else {
         ws next-event $session $method --max-time $timeout
@@ -115,34 +113,38 @@ export def "cdp call" [
         validate-command-input $method $params
     }
 
-    let request_id = if (is-nothing $id) { random-id } else { $id }
+    let request_id = if $id == null { random-id } else { $id }
     let command = (
         {
             id: $request_id
             method: $method
         }
-        | merge (if (is-nothing $params) { {} } else { {params: $params} })
-        | merge (if (is-nothing $session_id) { {} } else { {sessionId: $session_id} })
+        | merge (if $params == null { {} } else { {params: $params} })
+        | merge (if $session_id == null { {} } else { {sessionId: $session_id} })
     )
 
     $command | ws send-json $session
 
     let response = (ws await $session $request_id --max-time $max_time)
 
-    if (is-nothing $response) {
+    if $response == null {
         error make {
             msg: $"Timed out waiting for CDP response to ($method)"
         }
     }
 
-    if (has-column $response "error") {
+    let response_error = ($response | get -o error)
+
+    if $response_error != null {
         error make {
-            msg: $"CDP command ($method) failed: ($response.error)"
+            msg: $"CDP command ($method) failed: ($response_error)"
         }
     }
 
-    if (has-column $response "result") {
-        $response.result
+    let response_result = ($response | get -o result)
+
+    if $response_result != null {
+        $response_result
     } else {
         null
     }
@@ -156,13 +158,13 @@ export def "cdp event" [
     --no-validate # Skip schema validation before listening.
     --max-time(-m): duration = 30sec # Maximum time to wait for an event.
 ] {
-    if ((not $no_validate) and (not (is-nothing $method))) {
+    if ((not $no_validate) and ($method != null)) {
         validate-event-input $method
     }
 
-    if (is-nothing $session_id) {
+    if $session_id == null {
         next-event-once $session $method $max_time
-    } else if (is-nothing $method) {
+    } else if $method == null {
         ws next-event $session --session-id $session_id --max-time $max_time
     } else {
         ws next-event $session $method --session-id $session_id --max-time $max_time

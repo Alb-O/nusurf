@@ -11,7 +11,7 @@ export def schema-domains-raw [] {
 export def schema-domains [
     domain?: string # Domain name to filter on.
 ] {
-    if (is-nothing $domain) {
+    if $domain == null {
         schema-domains-raw
     } else {
         schema-domains-raw | where domain == $domain
@@ -92,7 +92,7 @@ export def schema-lookup [
         | get -o 0
     )
 
-    if (is-nothing $entry) {
+    if $entry == null {
         error make {
             msg: $"No CDP ($kind) named ($qualified)"
         }
@@ -104,7 +104,7 @@ export def schema-lookup [
 def entry-member [entry: record] {
     let name = ($entry | get -o name)
 
-    if (is-nothing $name) {
+    if $name == null {
         $entry | get id
     } else {
         $name
@@ -166,7 +166,7 @@ def completion-token [context: string] {
 export def complete-cdp-domain [
     context: string # Current commandline context.
 ] {
-    let prefix = (completion-token $context)
+    let needle = (completion-token $context | str downcase)
 
     {
         options: {
@@ -180,7 +180,7 @@ export def complete-cdp-domain [
                 (
                     $entry.domain
                     | str downcase
-                    | str contains ($prefix | str downcase)
+                    | str contains $needle
                 )
             }
             | each {|entry|
@@ -217,22 +217,16 @@ export def complete-cdp-type [
     completion-results (search-results "type" (completion-token $context))
 }
 
-def schema-command-parameter-names [command: record] {
-    ($command | get -o parameters | default [])
-    | each {|parameter| $parameter.name }
-}
-
-def schema-command-required-parameter-names [command: record] {
-    ($command | get -o parameters | default [])
-    | where {|parameter| (($parameter | get -o optional) | default false) == false }
-    | each {|parameter| $parameter.name }
-}
-
 def validate-command-params [method: string, params: any, command: record] {
-    let allowed = (schema-command-parameter-names $command)
-    let required = (schema-command-required-parameter-names $command)
+    let parameters = ($command | get -o parameters | default [])
+    let allowed = ($parameters | each {|parameter| $parameter.name })
+    let required = (
+        $parameters
+        | where {|parameter| (($parameter | get -o optional) | default false) == false }
+        | each {|parameter| $parameter.name }
+    )
 
-    let param_record = if (is-nothing $params) {
+    let param_record = if $params == null {
         {}
     } else {
         let param_type = ($params | describe)
@@ -247,14 +241,8 @@ def validate-command-params [method: string, params: any, command: record] {
     }
 
     let keys = ($param_record | columns)
-    let unknown = (
-        $keys
-        | where {|name| not ($allowed | any {|allowed_name| $allowed_name == $name }) }
-    )
-    let missing = (
-        $required
-        | where {|name| not ($keys | any {|param_name| $param_name == $name }) }
-    )
+    let unknown = ($keys | where {|name| $name not-in $allowed })
+    let missing = ($required | where {|name| $name not-in $keys })
 
     if (($unknown | length) > 0) {
         error make {

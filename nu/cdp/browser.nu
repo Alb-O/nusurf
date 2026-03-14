@@ -26,7 +26,7 @@ def json-version-url [target: any] {
 def ws-url-from-version-info [target: any, info: record] {
     let ws_url = ($info | get -o webSocketDebuggerUrl)
 
-    if (is-nothing $ws_url) {
+    if $ws_url == null {
         error make { msg: $"No webSocketDebuggerUrl in ($target | into string)" }
     }
 
@@ -73,13 +73,16 @@ export def resolve-ws-url [
 def browser-env-candidate [name: string] {
     let raw = ($env | get -o $name)
 
-    if (is-nothing $raw) {
+    if $raw == null {
         return null
     }
 
     let raw_text = ($raw | into string | str trim)
+    if ($raw_text | is-empty) {
+        return null
+    }
 
-    for candidate in [
+    [
         $raw_text
         (
             $raw_text
@@ -89,17 +92,13 @@ def browser-env-candidate [name: string] {
             | split words
             | get -o 0
         )
-    ] {
-        if (not (is-nothing $candidate)) {
-            let path = (resolve-path-candidate $candidate)
-
-            if (not (is-nothing $path)) {
-                return $path
-            }
-        }
+    ]
+    | where {|candidate|
+        ($candidate != null) and (not (($candidate | into string) | is-empty))
     }
-
-    null
+    | each {|candidate| resolve-path-candidate $candidate }
+    | where {|candidate| $candidate != null }
+    | get -o 0
 }
 
 def chromium-browser-candidates [] {
@@ -125,7 +124,7 @@ def chromium-browser-candidates [] {
         ($env | get -o ProgramFiles)
         ($env | get -o 'ProgramFiles(x86)')
     ] {
-        if (not (is-nothing $base)) {
+        if $base != null {
             $candidates = ($candidates | append $"($base)/Google/Chrome/Application/chrome.exe")
             $candidates = ($candidates | append $"($base)/Microsoft/Edge/Application/msedge.exe")
         }
@@ -144,7 +143,7 @@ def discover-browser-path [] {
         | get -o 0
     )
 
-    if (not (is-nothing $env_candidate)) {
+    if $env_candidate != null {
         return $env_candidate
     }
 
@@ -165,13 +164,13 @@ export def "cdp discover" [
 export def "cdp browser find" [
     --browser(-b): string # Explicit browser path or command name to resolve.
 ] {
-    let path = if (is-nothing $browser) {
+    let path = if $browser == null {
         discover-browser-path
     } else {
         resolve-path-candidate $browser
     }
 
-    if (is-nothing $path) {
+    if $path == null {
         error make {
             msg: (
                 "No Chromium-compatible browser was found. "
@@ -216,11 +215,11 @@ export def "cdp browser args" [
         $args = ($args | append "--headless=new")
     }
 
-    if (not (is-nothing $user_data_dir)) {
+    if $user_data_dir != null {
         $args = ($args | append $"--user-data-dir=($user_data_dir)")
     }
 
-    if (not (is-nothing $url)) {
+    if $url != null {
         $args = ($args | append $url)
     }
 
