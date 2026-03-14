@@ -59,19 +59,17 @@ def wait-for-ws-url [target: any, max_time: duration, interval: duration] {
 def open-or-reuse-browser-session [name: string, ws_url: string] {
     let existing_session = (ws list | where id == $name | get -o 0)
 
-    if $existing_session == null {
-        return (ws open $ws_url --name $name)
-    }
-
-    if $existing_session.url == $ws_url {
-        return $existing_session
-    }
-
-    error make {
-        msg: (
-            $"Session ($name) is already open for ($existing_session.url). "
-            + $"Close it first or use a different --name for ($ws_url)."
-        )
+    match $existing_session {
+        null => (ws open $ws_url --name $name)
+        {url: $url} if $url == $ws_url => $existing_session
+        _ => {
+            error make {
+                msg: (
+                    $"Session ($name) is already open for ($existing_session.url). "
+                    + $"Close it first or use a different --name for ($ws_url)."
+                )
+            }
+        }
     }
 }
 
@@ -151,7 +149,7 @@ def browser-env-candidate [name: string] {
 }
 
 def chromium-browser-candidates [] {
-    mut candidates = [
+    let common_candidates = [
         "google-chrome"
         "google-chrome-stable"
         "chromium"
@@ -168,18 +166,22 @@ def chromium-browser-candidates [] {
         "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
         "/Applications/Chromium.app/Contents/MacOS/Chromium"
     ]
-
-    for base in [
-        ($env | get -o ProgramFiles)
-        ($env | get -o 'ProgramFiles(x86)')
-    ] {
-        if $base != null {
-            $candidates = ($candidates | append $"($base)/Google/Chrome/Application/chrome.exe")
-            $candidates = ($candidates | append $"($base)/Microsoft/Edge/Application/msedge.exe")
+    let windows_candidates = (
+        [
+            ($env | get -o ProgramFiles)
+            ($env | get -o 'ProgramFiles(x86)')
+        ]
+        | compact
+        | each {|base|
+            [
+                $"($base)/Google/Chrome/Application/chrome.exe"
+                $"($base)/Microsoft/Edge/Application/msedge.exe"
+            ]
         }
-    }
+        | flatten
+    )
 
-    $candidates
+    [$common_candidates $windows_candidates] | flatten
 }
 
 def discover-browser-path [] {
@@ -193,13 +195,13 @@ def discover-browser-path [] {
     )
 
     if $env_candidate != null {
-        return $env_candidate
+        $env_candidate
+    } else {
+        chromium-browser-candidates
+        | each {|candidate| resolve-path-candidate $candidate }
+        | compact
+        | first
     }
-
-    chromium-browser-candidates
-    | each {|candidate| resolve-path-candidate $candidate }
-    | compact
-    | first
 }
 
 # Resolve a CDP discovery target to its websocket URL.
@@ -315,29 +317,38 @@ export def "cdp browser stop" [
     --job-id(-j): int # Background job id to kill.
     --user-data-dir(-u): string # Profile directory to remove.
 ] {
-    let session_name = if $session != null {
-        $session
-    } else if (($browser | describe) | str starts-with "record") {
-        $browser | get -o session
-    } else if $browser != null {
-        $browser | into string
-    } else {
-        "browser"
+    let browser_record = match ($browser | describe) {
+        $kind if ($kind | str starts-with "record") => $browser
+        _ => null
     }
-    let job_to_kill = if $job_id != null {
-        $job_id
-    } else if (($browser | describe) | str starts-with "record") {
-        $browser | get -o jobId
-    } else {
-        null
-    }
-    let profile_dir = if $user_data_dir != null {
-        $user_data_dir
-    } else if (($browser | describe) | str starts-with "record") {
-        $browser | get -o userDataDir
-    } else {
-        null
-    }
+    let session_name = (
+        [
+            $session
+            ($browser_record | get -o session)
+            (if (($browser_record == null) and ($browser != null)) {
+                $browser | into string
+            })
+            "browser"
+        ]
+        | compact
+        | first
+    )
+    let job_to_kill = (
+        [
+            $job_id
+            ($browser_record | get -o jobId)
+        ]
+        | compact
+        | first
+    )
+    let profile_dir = (
+        [
+            $user_data_dir
+            ($browser_record | get -o userDataDir)
+        ]
+        | compact
+        | first
+    )
 
     if $session_name != null {
         try { cdp call $session_name "Browser.close" | ignore }
@@ -361,7 +372,7 @@ export def "cdp browser args" [
     --user-data-dir(-u): string # Browser profile directory to use.
     --url: string # Initial URL to open after launch.
 ] {
-    mut args = [
+    [
         $"--remote-debugging-port=($port)"
         "--remote-allow-origins=*"
         "--no-first-run"
@@ -380,19 +391,8 @@ export def "cdp browser args" [
         "--metrics-recording-only"
         "--password-store=basic"
         "--use-mock-keychain"
-    ]
-
-    if $headless {
-        $args = ($args | append "--headless=new")
-    }
-
-    if $user_data_dir != null {
-        $args = ($args | append $"--user-data-dir=($user_data_dir)")
-    }
-
-    if $url != null {
-        $args = ($args | append $url)
-    }
-
-    $args
+        (if $headless { "--headless=new" })
+        (if $user_data_dir != null { $"--user-data-dir=($user_data_dir)" })
+        (if $url != null { $url })
+    ] | compact
 }
