@@ -553,13 +553,36 @@ fn pop_response(queues: &mut SessionQueues, id: &str) -> Option<JsonValue> {
 fn pop_event(queues: &mut SessionQueues, method: Option<&str>) -> Option<JsonValue> {
 	match method {
 		Some(method) => {
-			let event = queues.events_by_method.get_mut(method)?.pop_front();
+			let event = queues.events_by_method.get_mut(method)?.pop_front()?;
 			if matches!(queues.events_by_method.get(method), Some(queue) if queue.is_empty()) {
 				queues.events_by_method.remove(method);
 			}
-			event
+
+			remove_matching_event(&mut queues.events_all, &event);
+			Some(event)
 		}
-		None => queues.events_all.pop_front(),
+		None => {
+			let event = queues.events_all.pop_front()?;
+			let method = json_method_key(&event)?;
+			let empty_after_remove = if let Some(queue) = queues.events_by_method.get_mut(&method) {
+				remove_matching_event(queue, &event);
+				queue.is_empty()
+			} else {
+				false
+			};
+
+			if empty_after_remove {
+				queues.events_by_method.remove(&method);
+			}
+
+			Some(event)
+		}
+	}
+}
+
+fn remove_matching_event(queue: &mut VecDeque<JsonValue>, needle: &JsonValue) {
+	if let Some(index) = queue.iter().position(|candidate| candidate == needle) {
+		queue.remove(index);
 	}
 }
 

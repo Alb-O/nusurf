@@ -57,6 +57,9 @@ def "test ws await and next-event" [url: string] {
     assert equal $event.params.requestId 12
     assert equal $event.params.method "Page.navigate"
 
+    let duplicate_event = (ws next-event $session --max-time 100ms)
+    assert equal ($duplicate_event | describe) "nothing"
+
     let missing_response = (ws await $session 999 --max-time 100ms)
     assert equal ($missing_response | describe) "nothing"
 
