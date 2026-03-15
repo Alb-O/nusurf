@@ -1,5 +1,5 @@
 [package]
-authors = ["Alex Johnson <alex.kattathra.johnson@gmail.com>"]
+authors = ["Alex Johnson <alex.kattathra.johnson@gmail.com>", "Albert O'Shea"]
 repository = "https://github.com/alex-kattathra-johnson/nu_plugin_ws"
 readme = "README.md"
 license = "MIT"
