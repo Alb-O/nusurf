@@ -2,41 +2,41 @@
 
 A [Nushell](https://nushell.sh) plugin for WebSocket I/O, plus a Nu-first Chrome DevTools Protocol layer for browser automation and inspection.
 
-## Agent Quickstart
+## Quickstart
 
-The high-level workflow is: start or attach to a browser, select the current context once, then drive a page with selector-based commands.
+Start or attach to a browser, select the current context once, then drive a page with selector-based commands.
 
 ```bash
-# Launch or reuse a browser on the default CDP port.
+# launch or reuse browser
 let browser = (cdp browser start)
 
-# Make that browser the current context for later commands.
+# set current browser
 cdp use $browser
 
-# Open a page target and make it current.
+# open page, make current
 let page = (cdp page new)
 cdp use $page
 
-# Navigate, wait for the normal load event, then wait for a selector.
+# navigate, then wait for selector
 cdp page goto "https://example.com/login" --wait-for "form"
 
-# Inspect the DOM from Nu records.
+# inspect DOM
 cdp page query "input[name=email]"
 cdp page query ".result" --all
 
-# Drive simple interactions through the DOM layer.
+# fill and click
 cdp page fill "input[name=email]" "agent@example.com"
 cdp page click "button[type=submit]"
 
-# Wait for state changes when the page updates asynchronously.
+# wait for async update
 cdp page wait ".flash" --state visible --text "Signed in"
 
-# Clean up when done.
+# cleanup
 cdp page close
 cdp browser stop $browser
 ```
 
-All page commands default to the current page from `cdp use`, and browser-aware commands default to the current browser. You can still pass `--page` or `--browser` explicitly when you do not want ambient context.
+Page commands default to the current page from `cdp use`, and browser-aware commands default to the current browser. Pass `--page` or `--browser` when you want explicit routing.
 
 `cdp page wait` and `cdp page query` return normalized element records:
 
@@ -57,14 +57,14 @@ All page commands default to the current page from `cdp use`, and browser-aware 
 
 ## Discoverability
 
-The REPL is meant to be usable without memorizing the CDP schema:
+Tab completion sourced directly from upstream CDP schema:
 
 - `cdp call <TAB>` completes open websocket session names and CDP command names.
 - `cdp event <TAB>` completes session names and CDP event names.
 - `cdp schema commands Page`, `cdp schema command Page.navigate`, and `cdp schema search commands navigate` all have matching completer support.
 - `cdp page wait --state <TAB>` suggests `present`, `visible`, `hidden`, and `gone`.
 
-Use schema search when you know roughly what you need but not the exact protocol name:
+Use schema search when you know the shape of a command or event but not its exact name:
 
 ```bash
 cdp schema search navigate
@@ -72,17 +72,17 @@ cdp schema search commands screencap
 cdp schema search events load
 ```
 
-Use current-context behavior when you want short commands, and explicit `--page` / `--browser` when you want scripts to be more obvious about routing.
+Use current context for short commands, and explicit `--page` / `--browser` when you want scripts to be more obvious.
 
-## Debugging Defaults
+## Debugging defaults
 
-The convenience entry points keep raw websocket traffic by default so `ws recv` works immediately:
+The convenience entry points keep raw websocket traffic by default, so `ws recv` works immediately:
 
 - `cdp browser open`
 - `cdp browser start`
 - `cdp page new`
 
-That raw buffer now defaults to `128`. This makes it easier to inspect low-level traffic while still using the higher-level Nu commands:
+The raw buffer now defaults to `128`, which makes low-level inspection easier while still using the higher-level Nu commands:
 
 ```bash
 let browser = (cdp browser start)
@@ -90,13 +90,13 @@ cdp call $browser.session "Browser.getVersion" | ignore
 ws recv $browser.session --full
 ```
 
-Low-level `cdp open` still keeps `--raw-buffer` at `0` by default for compatibility and minimal overhead.
+Low-level `cdp open` still defaults `--raw-buffer` to `0` for compatibility and minimal overhead.
 
-## Lower-Level Usage
+## Lower-level usage
+
+The higher-level CDP commands cover the normal browser workflow. Drop to the raw websocket layer when you need a one-off socket or a protocol the CDP helpers do not model.
 
 ### One-shot websocket streaming
-
-Use `ws` when one command should open the socket, optionally send input, and stream responses back.
 
 ```bash
 ws "wss://echo.websocket.org"
@@ -116,21 +116,9 @@ ws list
 ws close cdp
 ```
 
-### Raw CDP helpers
+`cdp page click` and `cdp page fill` stay intentionally lightweight: they are DOM-driven through `Runtime.evaluate`, not true input synthesis.
 
-```bash
-let browser = (cdp browser start)
-cdp call $browser.session "Browser.getVersion"
-
-let page = (cdp page new)
-cdp page eval "document.title"
-cdp page goto "data:text/html,<main>ok</main>"
-cdp page wait "main"
-```
-
-`cdp page click` and `cdp page fill` are DOM-driven through `Runtime.evaluate`. They are intended for lightweight agent workflows, not full input synthesis.
-
-## Development
+## Dev
 
 Refresh the bundled CDP schema:
 
@@ -151,4 +139,4 @@ devenv-run -C . cargo build --bin nu_plugin_ws --bin nu_ws_live_fixture_server -
 devenv-run -C . nu --no-config-file --plugins target/debug/nu_plugin_ws -- tests/run_live_browser_suite.nu browser_all
 ```
 
-Add `--verbose` to `tests/run_live_browser_suite.nu` when you want per-script stdout and stderr even on success.
+Add `--verbose` to `tests/run_live_browser_suite.nu` to print per-script stdout and stderr even on success.
