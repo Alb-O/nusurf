@@ -1,4 +1,4 @@
-use support/live_browser_runner.nu [run-live-browser-suite]
+use support/suite_runner.nu [run-test-suite]
 
 def main [
     suite: string = "browser_no_fixture" # Live browser suite to run.
@@ -10,11 +10,11 @@ def main [
     --verbose(-v) # Print child script stdout and stderr even when scripts succeed.
 ] {
     if $verbose {
-        run-live-browser-suite $suite --plugin $plugin --fixture-binary $fixture_binary --browser $browser --port $port --max-time (
+        run-test-suite $suite --plugin $plugin --fixture-binary $fixture_binary --browser $browser --port $port --max-time (
             $max_time
         ) --verbose
     } else {
-        run-live-browser-suite $suite --plugin $plugin --fixture-binary $fixture_binary --browser $browser --port $port --max-time (
+        run-test-suite $suite --plugin $plugin --fixture-binary $fixture_binary --browser $browser --port $port --max-time (
             $max_time
         )
     }
