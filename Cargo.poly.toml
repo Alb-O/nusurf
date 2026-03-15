@@ -29,3 +29,10 @@ url = true
 [dev-dependencies]
 nu-plugin-test-support = true
 nu-test-support = true
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
