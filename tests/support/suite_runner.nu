@@ -341,9 +341,9 @@ def script-args [
     # most scripts follow their harness convention; a few opt out with args_mode.
     match ($args_mode | default $harness.kind) {
         "none" => []
-        "mock-ws" => [$context.ws_url]
-        "mock-cdp" => [($context.http_port | into string) $context.ws_url]
-        "live-browser" => (
+        "mock_ws" => [$context.ws_url]
+        "mock_cdp" => [($context.http_port | into string) $context.ws_url]
+        "live_browser" => (
             if (($harness | get -o needs_fixture) | default false) {
                 [($context.http_port | into string) ($context.fixture_port | into string)]
             } else {
@@ -489,9 +489,9 @@ def run-suite-harness [
 ] {
     # harness adapters own environment setup; scripts stay focused on assertions.
     match $suite_run.harness.kind {
-        "mock-ws" => (run-mock-ws-suite $repo_root $suite_run $plugin_path $fixture_binary $verbose)
-        "mock-cdp" => (run-mock-cdp-suite $repo_root $suite_run $plugin_path $fixture_binary $verbose)
-        "live-browser" => (
+        "mock_ws" => (run-mock-ws-suite $repo_root $suite_run $plugin_path $fixture_binary $verbose)
+        "mock_cdp" => (run-mock-cdp-suite $repo_root $suite_run $plugin_path $fixture_binary $verbose)
+        "live_browser" => (
             run-live-browser-suite $repo_root $suite_run $plugin_path $fixture_binary $max_time $verbose $browser $port
         )
         _ => (

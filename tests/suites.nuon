@@ -2,59 +2,59 @@
   # scripts are the reusable test units
   scripts: {
     ws_basic: {
-      path: "tests/ws/basic.nu"
+      path: tests/ws/basic.nu
     }
     cdp_mock: {
-      path: "tests/cdp/mock.nu"
+      path: tests/cdp/mock.nu
     }
     cdp_schema: {
-      path: "tests/cdp/schema.nu"
+      path: tests/cdp/schema.nu
       # schema introspection is pure, doesn't need fixture connection args
-      args_mode: "none"
+      args_mode: none
     }
     browser_basic: {
-      path: "tests/cdp/browser/basic.nu"
+      path: tests/cdp/browser/basic.nu
     }
     browser_disconnects: {
-      path: "tests/cdp/browser/disconnects.nu"
+      path: tests/cdp/browser/disconnects.nu
     }
     browser_large_artifacts: {
       # exercises very large screenshot/pdf payloads
       # opt-in if ok with waiting
-      path: "tests/cdp/browser/large_artifacts.nu"
+      path: tests/cdp/browser/large_artifacts.nu
       ignore: true
     }
     browser_page_workflow: {
-      path: "tests/cdp/browser/page_workflow.nu"
+      path: tests/cdp/browser/page_workflow.nu
     }
     browser_page_dom: {
-      path: "tests/cdp/browser/page_dom.nu"
+      path: tests/cdp/browser/page_dom.nu
     }
     browser_events: {
-      path: "tests/cdp/browser/events.nu"
+      path: tests/cdp/browser/events.nu
     }
     browser_concurrency: {
-      path: "tests/cdp/browser/concurrency.nu"
+      path: tests/cdp/browser/concurrency.nu
     }
     browser_attached: {
-      path: "tests/cdp/browser/attached.nu"
+      path: tests/cdp/browser/attached.nu
     }
   }
 
   # harnesses describe how scripts get their environment
   harnesses: {
     mock_ws: {
-      kind: "mock-ws"
+      kind: mock_ws
     }
     mock_cdp: {
-      kind: "mock-cdp"
+      kind: mock_cdp
     }
     live_browser: {
-      kind: "live-browser"
+      kind: live_browser
       needs_fixture: false
     }
     live_browser_fixture: {
-      kind: "live-browser"
+      kind: live_browser
       needs_fixture: true
     }
   }
@@ -62,11 +62,11 @@
   # suites can either bind scripts to harness or compose other suites
   suites: {
     mock_ws: {
-      harness: "mock_ws"
+      harness: mock_ws
       scripts: [ws_basic]
     }
     mock_cdp: {
-      harness: "mock_cdp"
+      harness: mock_cdp
       scripts: [
         cdp_mock
         cdp_schema
@@ -79,7 +79,7 @@
       ]
     }
     browser_no_fixture: {
-      harness: "live_browser"
+      harness: live_browser
       scripts: [
         browser_basic
         browser_disconnects
@@ -89,7 +89,7 @@
       ]
     }
     browser_with_fixture: {
-      harness: "live_browser_fixture"
+      harness: live_browser_fixture
       scripts: [
         browser_events
         browser_concurrency
@@ -103,7 +103,7 @@
       ]
     }
     page_workflow: {
-      harness: "live_browser"
+      harness: live_browser
       scripts: [
         browser_page_workflow
         browser_page_dom
