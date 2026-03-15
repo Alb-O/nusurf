@@ -397,29 +397,29 @@ pub fn connect_session(
 }
 
 fn open_websocket(url: WebSocketUrl, headers: HashMap<String, String>) -> Option<WebSocketStream> {
-	log::trace!("Building WebSocket request for: {}", url.as_str());
+	tracing::trace!("Building WebSocket request for: {}", url.as_str());
 
 	let mut builder = ClientRequestBuilder::new(url.as_str().parse().ok()?);
 	let origin = websocket_origin(&url);
 
-	log::trace!("Setting Origin header to: {origin}");
+	tracing::trace!("Setting Origin header to: {origin}");
 	builder = builder.with_header("Origin", origin);
 
 	for (k, v) in headers {
-		log::trace!("Adding header: {k} = {v}");
+		tracing::trace!("Adding header: {k} = {v}");
 		builder = builder.with_header(k, v);
 	}
 
-	log::debug!("Attempting WebSocket connection...");
+	tracing::debug!("Attempting WebSocket connection...");
 
 	match connect_with_config(builder, Some(websocket_config()), 3) {
 		Ok((mut websocket, _)) => {
-			log::debug!("WebSocket handshake completed successfully");
+			tracing::debug!("WebSocket handshake completed successfully");
 			configure_socket(&mut websocket).ok()?;
 			Some(websocket)
 		}
 		Err(e) => {
-			log::error!("Failed to connect to WebSocket: {e:?}");
+			tracing::error!("Failed to connect to WebSocket: {e:?}");
 			None
 		}
 	}
@@ -474,7 +474,7 @@ fn spawn_worker_thread(
 	thread::Builder::new()
 		.name("websocket worker".to_string())
 		.spawn(move || {
-			log::debug!("WebSocket worker thread started");
+			tracing::debug!("WebSocket worker thread started");
 			loop {
 				if closed.load(Ordering::SeqCst) {
 					let _ = websocket.close(Some(normal_close("session closed")));
@@ -485,7 +485,7 @@ fn spawn_worker_thread(
 					Ok(ControlFlow::Continue) => {}
 					Ok(ControlFlow::Closed) => return,
 					Err(e) => {
-						log::error!("WebSocket control error: {e}");
+						tracing::error!("WebSocket control error: {e}");
 						closed.store(true, Ordering::SeqCst);
 						return;
 					}
@@ -494,7 +494,7 @@ fn spawn_worker_thread(
 				match websocket.read() {
 					Ok(Message::Text(msg)) => {
 						if tx_read.send(ReceivedMessage::Text(msg.to_string())).is_err() {
-							log::debug!("Channel closed, closing WebSocket");
+							tracing::debug!("Channel closed, closing WebSocket");
 							closed.store(true, Ordering::SeqCst);
 							let _ = websocket.close(Some(normal_close("receiver dropped")));
 							return;
@@ -502,36 +502,36 @@ fn spawn_worker_thread(
 					}
 					Ok(Message::Binary(msg)) => {
 						if tx_read.send(ReceivedMessage::Binary(msg.to_vec())).is_err() {
-							log::debug!("Channel closed, closing WebSocket");
+							tracing::debug!("Channel closed, closing WebSocket");
 							closed.store(true, Ordering::SeqCst);
 							let _ = websocket.close(Some(normal_close("receiver dropped")));
 							return;
 						}
 					}
 					Ok(Message::Close(_)) => {
-						log::debug!("Received Close message");
+						tracing::debug!("Received Close message");
 						closed.store(true, Ordering::SeqCst);
 						return;
 					}
 					Ok(other) => {
-						log::trace!("Ignoring WebSocket message: {other:?}");
+						tracing::trace!("Ignoring WebSocket message: {other:?}");
 					}
 					Err(WsError::Io(err)) if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
 						thread::yield_now();
 						continue;
 					}
 					Err(WsError::ConnectionClosed | WsError::AlreadyClosed) => {
-						log::debug!("WebSocket closed");
+						tracing::debug!("WebSocket closed");
 						closed.store(true, Ordering::SeqCst);
 						return;
 					}
 					Err(WsError::Protocol(ProtocolError::ResetWithoutClosingHandshake)) => {
-						log::debug!("WebSocket peer reset without closing handshake");
+						tracing::debug!("WebSocket peer reset without closing handshake");
 						closed.store(true, Ordering::SeqCst);
 						return;
 					}
 					Err(e) => {
-						log::error!("WebSocket read error: {e:?}");
+						tracing::error!("WebSocket read error: {e:?}");
 						closed.store(true, Ordering::SeqCst);
 						return;
 					}
@@ -548,7 +548,7 @@ fn spawn_session_worker_thread(
 	thread::Builder::new()
 		.name("websocket session worker".to_string())
 		.spawn(move || {
-			log::debug!("WebSocket session worker thread started");
+			tracing::debug!("WebSocket session worker thread started");
 			loop {
 				if closed.load(Ordering::SeqCst) {
 					let _ = websocket.close(Some(normal_close("session closed")));
@@ -563,7 +563,7 @@ fn spawn_session_worker_thread(
 						return;
 					}
 					Err(e) => {
-						log::error!("WebSocket control error: {e}");
+						tracing::error!("WebSocket control error: {e}");
 						closed.store(true, Ordering::SeqCst);
 						mark_session_closed(&state, format!("WebSocket control error: {e}"));
 						return;
@@ -574,32 +574,32 @@ fn spawn_session_worker_thread(
 					Ok(Message::Text(msg)) => enqueue_session_message(&state, ReceivedMessage::Text(msg.to_string())),
 					Ok(Message::Binary(msg)) => enqueue_session_message(&state, ReceivedMessage::Binary(msg.to_vec())),
 					Ok(Message::Close(_)) => {
-						log::debug!("Received Close message");
+						tracing::debug!("Received Close message");
 						closed.store(true, Ordering::SeqCst);
 						mark_session_closed(&state, "WebSocket session was closed by the remote peer");
 						return;
 					}
 					Ok(other) => {
-						log::trace!("Ignoring WebSocket message: {other:?}");
+						tracing::trace!("Ignoring WebSocket message: {other:?}");
 					}
 					Err(WsError::Io(err)) if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
 						thread::yield_now();
 						continue;
 					}
 					Err(WsError::ConnectionClosed | WsError::AlreadyClosed) => {
-						log::debug!("WebSocket closed");
+						tracing::debug!("WebSocket closed");
 						closed.store(true, Ordering::SeqCst);
 						mark_session_closed(&state, "WebSocket session is closed");
 						return;
 					}
 					Err(WsError::Protocol(ProtocolError::ResetWithoutClosingHandshake)) => {
-						log::debug!("WebSocket peer reset without closing handshake");
+						tracing::debug!("WebSocket peer reset without closing handshake");
 						closed.store(true, Ordering::SeqCst);
 						mark_session_closed(&state, "WebSocket session is closed");
 						return;
 					}
 					Err(e) => {
-						log::error!("WebSocket read error: {e:?}");
+						tracing::error!("WebSocket read error: {e:?}");
 						closed.store(true, Ordering::SeqCst);
 						mark_session_closed(&state, format!("WebSocket read error: {e}"));
 						return;

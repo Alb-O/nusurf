@@ -18,11 +18,11 @@ name = "nu_ws_live_fixture_server"
 path = "src/bin/live_fixture_server.rs"
 
 [dependencies]
-env_logger = true
-log = true
 nu-plugin = true
 nu-protocol = true
 serde_json = true
+tracing = true
+tracing-subscriber = { default-features = false, features = ["fmt"] }
 tungstenite = { features = ["native-tls"] }
 
 [dev-dependencies]

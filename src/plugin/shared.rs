@@ -2,25 +2,29 @@ use {
 	crate::ws::client::{ReceivedMessage, WebSocketUrl},
 	nu_protocol::{LabeledError, Record, Value},
 	std::time::Duration,
+	tracing::Level,
 };
 
 pub(super) fn init_logging(verbose: Option<Value>) {
-	let log_level_filter = if let Some(Value::Int { val, .. }) = verbose {
+	let level = if let Some(Value::Int { val, .. }) = verbose {
 		match val {
-			0 => log::LevelFilter::Error,
-			1 => log::LevelFilter::Warn,
-			2 => log::LevelFilter::Info,
-			3 => log::LevelFilter::Debug,
-			4 => log::LevelFilter::Trace,
-			_ => log::LevelFilter::Info,
+			0 => Level::ERROR,
+			1 => Level::WARN,
+			2 => Level::INFO,
+			3 => Level::DEBUG,
+			4 => Level::TRACE,
+			_ => Level::INFO,
 		}
 	} else {
-		log::LevelFilter::Error
+		Level::ERROR
 	};
 
-	let _ = env_logger::Builder::from_default_env()
-		.filter_level(log_level_filter)
-		.try_init();
+	let subscriber = tracing_subscriber::fmt()
+		.with_max_level(level)
+		.with_ansi(false)
+		.without_time()
+		.finish();
+	let _ = tracing::subscriber::set_global_default(subscriber);
 }
 
 pub(super) fn validate_ws_scheme(url: &WebSocketUrl, span: nu_protocol::Span) -> Result<(), LabeledError> {
