@@ -148,7 +148,7 @@ Run the live browser suites:
 
 ```bash
 devenv-run -C . cargo build --bin nu_plugin_ws --bin nu_ws_live_fixture_server --all-features
-devenv-run -C . nu --no-config-file --plugins target/debug/nu_plugin_ws -- tests/run_live_browser_suite.nu browser-all
+devenv-run -C . nu --no-config-file --plugins target/debug/nu_plugin_ws -- tests/run_live_browser_suite.nu browser_all
 ```
 
 Add `--verbose` to `tests/run_live_browser_suite.nu` when you want per-script stdout and stderr even on success.

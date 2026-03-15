@@ -1,88 +1,67 @@
 {
-  "browser-no-fixture": [
-    {
+  scripts: {
+    basic: {
       path: "tests/cdp/browser/basic.nu"
       needsFixture: false
     }
-    {
+    disconnects: {
       path: "tests/cdp/browser/disconnects.nu"
       needsFixture: false
     }
-    {
+    large_artifacts: {
       # exercises very large screenshot/pdf payloads
       # opt-in if ok with waiting
       path: "tests/cdp/browser/large_artifacts.nu"
       needsFixture: false
       ignore: true
     }
-    {
+    page_workflow: {
       path: "tests/cdp/browser/page_workflow.nu"
       needsFixture: false
     }
-    {
+    page_dom: {
       path: "tests/cdp/browser/page_dom.nu"
       needsFixture: false
     }
-  ]
-  "browser-with-fixture": [
-    {
+    events: {
       path: "tests/cdp/browser/events.nu"
       needsFixture: true
     }
-    {
+    concurrency: {
       path: "tests/cdp/browser/concurrency.nu"
       needsFixture: true
     }
-    {
+    attached: {
       path: "tests/cdp/browser/attached.nu"
       needsFixture: true
     }
-  ]
-  "browser-all": [
-    {
-      path: "tests/cdp/browser/basic.nu"
-      needsFixture: false
-    }
-    {
-      path: "tests/cdp/browser/disconnects.nu"
-      needsFixture: false
-    }
-    {
-      # exercises very large screenshot/pdf payloads
-      # opt-in if ok with waiting
-      path: "tests/cdp/browser/large_artifacts.nu"
-      needsFixture: false
-      ignore: true
-    }
-    {
-      path: "tests/cdp/browser/page_workflow.nu"
-      needsFixture: false
-    }
-    {
-      path: "tests/cdp/browser/page_dom.nu"
-      needsFixture: false
-    }
-    {
-      path: "tests/cdp/browser/events.nu"
-      needsFixture: true
-    }
-    {
-      path: "tests/cdp/browser/concurrency.nu"
-      needsFixture: true
-    }
-    {
-      path: "tests/cdp/browser/attached.nu"
-      needsFixture: true
-    }
-  ]
-  "page-workflow": [
-    {
-      path: "tests/cdp/browser/page_workflow.nu"
-      needsFixture: false
-    }
-    {
-      path: "tests/cdp/browser/page_dom.nu"
-      needsFixture: false
-    }
-  ]
+  }
+  suites: {
+    browser_no_fixture: [
+      basic
+      disconnects
+      large_artifacts
+      page_workflow
+      page_dom
+    ]
+    browser_with_fixture: [
+      events
+      concurrency
+      attached
+    ]
+    browser_all: [
+      basic
+      disconnects
+      large_artifacts
+      page_workflow
+      page_dom
+      events
+      concurrency
+      attached
+    ]
+    page_workflow: [
+      page_workflow
+      page_dom
+    ]
+  }
 }

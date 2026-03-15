@@ -148,17 +148,40 @@ def run-live-script [
     }
 }
 
-def suite-scripts [suite: string] {
-    let suites = (open $live_browser_suites_file)
-    let scripts = ($suites | get -o $suite)
+def live-browser-suite-config [] {
+    open $live_browser_suites_file
+}
 
-    if $scripts == null {
+def suite-script-ids [suite: string] {
+    let config = (live-browser-suite-config)
+    let script_ids = ($config | get -o suites | get -o $suite)
+
+    if $script_ids == null {
         error make {
             msg: $"Unknown live browser suite: ($suite)"
         }
     }
 
-    $scripts
+    $script_ids
+}
+
+def resolve-suite-script [suite: string, script_id: string] {
+    let config = (live-browser-suite-config)
+    let script = ($config | get -o scripts | get -o $script_id)
+
+    if $script == null {
+        error make {
+            msg: $"Unknown live browser script id in suite ($suite): ($script_id)"
+        }
+    }
+
+    $script
+}
+
+def suite-scripts [suite: string] {
+    suite-script-ids $suite | each {|script_id|
+        resolve-suite-script $suite $script_id
+    }
 }
 
 def active-suite-scripts [suite: string] {
@@ -216,7 +239,7 @@ def stop-fixture-server [fixture_server?: record] {
 
 # Run a named live browser suite with a managed browser session and optional fixture server.
 export def "run-live-browser-suite" [
-    suite: string = "browser-no-fixture" # Live browser suite to run.
+    suite: string = "browser_no_fixture" # Live browser suite to run.
     --plugin(-p): string = "target/debug/nu_plugin_ws" # Plugin binary path to load in child Nu processes.
     --fixture-binary(-f): string = "target/debug/nu_ws_live_fixture_server" # Fixture server binary for suites that need one.
     --browser(-b): string # Explicit Chromium-compatible browser path or command name.

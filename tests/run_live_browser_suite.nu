@@ -1,7 +1,7 @@
 use support/live_browser_runner.nu [run-live-browser-suite]
 
 def main [
-    suite: string = "browser-no-fixture" # Live browser suite to run.
+    suite: string = "browser_no_fixture" # Live browser suite to run.
     --plugin(-p): string = "target/debug/nu_plugin_ws" # Plugin binary path to load in child Nu processes.
     --fixture-binary(-f): string = "target/debug/nu_ws_live_fixture_server" # Fixture server binary for suites that need one.
     --browser(-b): string # Explicit Chromium-compatible browser path or command name.
