@@ -70,6 +70,7 @@ pub struct SessionClient {
 /// Incoming frames are buffered as newline-delimited chunks so Nushell can
 /// consume the socket through its standard byte-stream interface.
 pub struct WebSocketClient {
+	handle: SessionHandle,
 	rx: Receiver<ReceivedMessage>,
 	deadline: Option<Instant>,
 	buf_deque: VecDeque<u8>,
@@ -177,8 +178,11 @@ fn parse_port(port: &str) -> Option<u16> {
 
 impl WebSocketClient {
 	/// Create a byte-stream adapter over a worker thread receiver.
-	pub fn new(rx: Receiver<ReceivedMessage>, timeout: Option<Duration>, signals: Signals, span: Span) -> Self {
+	pub fn new(
+		rx: Receiver<ReceivedMessage>, timeout: Option<Duration>, signals: Signals, span: Span, handle: SessionHandle,
+	) -> Self {
 		Self {
+			handle,
 			rx,
 			deadline: timeout.map(|timeout| Instant::now() + timeout),
 			buf_deque: VecDeque::new(),
@@ -213,6 +217,12 @@ impl WebSocketClient {
 			}
 		}
 		len
+	}
+}
+
+impl Drop for WebSocketClient {
+	fn drop(&mut self) {
+		let _ = self.handle.close();
 	}
 }
 
@@ -381,7 +391,7 @@ pub fn connect(
 	let websocket = open_websocket(url, headers)?;
 	let (tx, rx, closed) = connect_components(websocket)?;
 	let handle = SessionHandle { tx, closed };
-	Some((WebSocketClient::new(rx, timeout, signals, span), handle))
+	Some((WebSocketClient::new(rx, timeout, signals, span, handle.clone()), handle))
 }
 
 /// Open a persistent WebSocket session with routed JSON response and event queues.
