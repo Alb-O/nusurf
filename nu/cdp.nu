@@ -16,6 +16,15 @@ export use cdp/browser.nu [
     "cdp browser args"
 ]
 
+export use cdp/page.nu [
+    "cdp use"
+    "cdp page new"
+    "cdp page list"
+    "cdp page close"
+    "cdp page goto"
+    "cdp page eval"
+]
+
 export use cdp/session.nu [
     "cdp open"
     "cdp call"
