@@ -219,38 +219,35 @@ export def complete-cdp-type [
 
 def validate-command-params [method: string, params: any, command: record] {
     let parameters = ($command | get -o parameters | default [])
-    let allowed = ($parameters | each {|parameter| $parameter.name })
+    let allowed = ($parameters | get name)
     let required = (
         $parameters
-        | where {|parameter| (($parameter | get -o optional) | default false) == false }
-        | each {|parameter| $parameter.name }
+        | default false optional
+        | where optional == false
+        | get name
     )
 
-    let param_record = if $params == null {
-        {}
-    } else {
-        let param_type = ($params | describe)
-
-        if (not ($param_type | str starts-with "record")) {
+    let param_record = match ($params | describe) {
+        "nothing" => {}
+        $param_type if ($param_type | str starts-with "record") => $params
+        $param_type => {
             error make {
                 msg: $"CDP command ($method) params must be a record, got: ($param_type)"
             }
         }
-
-        $params
     }
 
     let keys = ($param_record | columns)
-    let unknown = ($keys | where {|name| $name not-in $allowed })
-    let missing = ($required | where {|name| $name not-in $keys })
+    let unknown = ($keys | where $it not-in $allowed)
+    let missing = ($required | where $it not-in $keys)
 
-    if (($unknown | length) > 0) {
+    if (not ($unknown | is-empty)) {
         error make {
             msg: $"Unknown CDP params for ($method): (($unknown | str join ', '))"
         }
     }
 
-    if (($missing | length) > 0) {
+    if (not ($missing | is-empty)) {
         error make {
             msg: $"Missing required CDP params for ($method): (($missing | str join ', '))"
         }
