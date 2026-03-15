@@ -1,8 +1,8 @@
 use {
 	nu_plugin::{JsonSerializer, serve_plugin},
-	nu_plugin_ws::WebSocketPlugin,
+	nusurf::NusurfPlugin,
 };
 
 fn main() {
-	serve_plugin(&WebSocketPlugin, JsonSerializer)
+	serve_plugin(&NusurfPlugin, JsonSerializer)
 }

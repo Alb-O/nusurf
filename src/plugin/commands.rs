@@ -1,6 +1,6 @@
 use {
 	super::{
-		WebSocketPlugin,
+		NusurfPlugin,
 		convert::{json_to_nu_value, pipeline_input_to_bytes, pipeline_input_to_json, value_to_id_key},
 		registry::{
 			SessionEntry, next_session_id, prune_closed_sessions, session_client, session_sort_key, session_value,
@@ -15,7 +15,7 @@ use {
 	},
 };
 
-pub(super) fn all_commands() -> Vec<Box<dyn PluginCommand<Plugin = WebSocketPlugin>>> {
+pub(super) fn all_commands() -> Vec<Box<dyn PluginCommand<Plugin = NusurfPlugin>>> {
 	vec![
 		Box::new(WebSocket),
 		Box::new(WebSocketOpen),
@@ -42,7 +42,7 @@ struct WebSocketClose;
 struct WebSocketList;
 
 impl PluginCommand for WebSocket {
-	type Plugin = WebSocketPlugin;
+	type Plugin = NusurfPlugin;
 
 	fn name(&self) -> &str {
 		"ws"
@@ -115,7 +115,7 @@ impl PluginCommand for WebSocket {
 }
 
 impl PluginCommand for WebSocketOpen {
-	type Plugin = WebSocketPlugin;
+	type Plugin = NusurfPlugin;
 
 	fn name(&self) -> &str {
 		"ws open"
@@ -190,7 +190,7 @@ impl PluginCommand for WebSocketOpen {
 }
 
 impl PluginCommand for WebSocketSend {
-	type Plugin = WebSocketPlugin;
+	type Plugin = NusurfPlugin;
 
 	fn name(&self) -> &str {
 		"ws send"
@@ -222,7 +222,7 @@ impl PluginCommand for WebSocketSend {
 }
 
 impl PluginCommand for WebSocketRecv {
-	type Plugin = WebSocketPlugin;
+	type Plugin = NusurfPlugin;
 
 	fn name(&self) -> &str {
 		"ws recv"
@@ -267,7 +267,7 @@ impl PluginCommand for WebSocketRecv {
 }
 
 impl PluginCommand for WebSocketSendJson {
-	type Plugin = WebSocketPlugin;
+	type Plugin = NusurfPlugin;
 
 	fn name(&self) -> &str {
 		"ws send-json"
@@ -300,7 +300,7 @@ impl PluginCommand for WebSocketSendJson {
 }
 
 impl PluginCommand for WebSocketRecvJson {
-	type Plugin = WebSocketPlugin;
+	type Plugin = NusurfPlugin;
 
 	fn name(&self) -> &str {
 		"ws recv-json"
@@ -343,7 +343,7 @@ impl PluginCommand for WebSocketRecvJson {
 }
 
 impl PluginCommand for WebSocketAwait {
-	type Plugin = WebSocketPlugin;
+	type Plugin = NusurfPlugin;
 
 	fn name(&self) -> &str {
 		"ws await"
@@ -389,7 +389,7 @@ impl PluginCommand for WebSocketAwait {
 }
 
 impl PluginCommand for WebSocketNextEvent {
-	type Plugin = WebSocketPlugin;
+	type Plugin = NusurfPlugin;
 
 	fn name(&self) -> &str {
 		"ws next-event"
@@ -447,7 +447,7 @@ impl PluginCommand for WebSocketNextEvent {
 }
 
 impl PluginCommand for WebSocketClose {
-	type Plugin = WebSocketPlugin;
+	type Plugin = NusurfPlugin;
 
 	fn name(&self) -> &str {
 		"ws close"
@@ -481,7 +481,7 @@ impl PluginCommand for WebSocketClose {
 }
 
 impl PluginCommand for WebSocketList {
-	type Plugin = WebSocketPlugin;
+	type Plugin = NusurfPlugin;
 
 	fn name(&self) -> &str {
 		"ws list"

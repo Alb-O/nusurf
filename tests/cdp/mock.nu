@@ -23,11 +23,11 @@ def "test cdp call and event" [http_port: int] {
     assert equal $opened.id $session
 
     let result = (cdp call $session "Runtime.evaluate" {
-        expression: "'nu-plugin-ws'"
+        expression: "'nusurf'"
     } --id 41 --session-id "session-41")
 
     assert equal $result.echoMethod "Runtime.evaluate"
-    assert equal $result.echoParams.expression "'nu-plugin-ws'"
+    assert equal $result.echoParams.expression "'nusurf'"
 
     let event = (
         cdp event $session "Test.event" --session-id "session-41" --no-validate --max-time 2sec

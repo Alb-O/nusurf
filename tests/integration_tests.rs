@@ -1,7 +1,7 @@
 use {
 	nu_plugin_test_support::PluginTest,
-	nu_plugin_ws::WebSocketPlugin,
 	nu_protocol::{Span, Value},
+	nusurf::NusurfPlugin,
 	serde_json::{Value as JsonValue, json},
 	std::{
 		net::{SocketAddr, TcpListener, TcpStream},
@@ -277,7 +277,7 @@ fn test_websocket_connection_and_echo() {
 	let server = MockWebSocketServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(&format!(
 		r#"echo "Hello WebSocket" | ws "{}" --max-time 5sec"#,
@@ -295,7 +295,7 @@ fn test_websocket_binary_data() {
 	let server = MockWebSocketServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(&format!(r#"0x[48656c6c6f] | ws "{}""#, server.url()));
 
@@ -307,7 +307,7 @@ fn test_websocket_with_custom_headers() {
 	let server = MockWebSocketServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(&format!(
 		r#"ws "{}" --headers {{ "X-Custom-Header": "test-value" }}"#,
@@ -322,7 +322,7 @@ fn test_websocket_timeout() {
 	let server = MockWebSocketServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(&format!(r#"ws "{}" --max-time 1sec"#, server.url()));
 
@@ -334,7 +334,7 @@ fn test_websocket_json_streaming() {
 	let server = MockJsonServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(&format!(r#"ws "{}""#, server.url()));
 
@@ -346,7 +346,7 @@ fn test_websocket_json_streaming() {
 
 #[test]
 fn test_websocket_invalid_url() {
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(r#"ws "invalid-url""#);
 
@@ -355,7 +355,7 @@ fn test_websocket_invalid_url() {
 
 #[test]
 fn test_websocket_connection_refused() {
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(r#"ws "ws://127.0.0.1:12345""#);
 
@@ -367,7 +367,7 @@ fn test_websocket_verbose_logging() {
 	let server = MockWebSocketServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(&format!(r#"echo "test" | ws "{}" --verbose 3"#, server.url()));
 
@@ -382,7 +382,7 @@ fn test_websocket_no_input_data() {
 	let server = MockJsonServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(&format!(r#"ws "{}""#, server.url()));
 
@@ -450,7 +450,7 @@ fn test_websocket_timeout_expires() {
 	let server = DelayedResponseServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(&format!(r#"ws "{}" --max-time 1sec | collect"#, server.url()));
 
@@ -462,7 +462,7 @@ fn test_websocket_large_message() {
 	let server = MockWebSocketServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	// Create a large message (10KB)
 	let large_data = "A".repeat(10_000);
@@ -483,7 +483,7 @@ fn test_websocket_empty_message() {
 	let server = MockWebSocketServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(&format!(r#"echo "" | ws "{}""#, server.url()));
 
@@ -498,7 +498,7 @@ fn test_websocket_special_characters() {
 	let server = MockWebSocketServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let special_text = "Hello! 🌍 测试 русский العربية ñüéíó";
 	let result = plugin_test.eval(&format!(r#"echo "{}" | ws "{}""#, special_text, server.url()));
@@ -511,7 +511,7 @@ fn test_websocket_special_characters() {
 
 #[test]
 fn test_websocket_malformed_url() {
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(r#"ws "not-a-url-at-all""#);
 
@@ -520,7 +520,7 @@ fn test_websocket_malformed_url() {
 
 #[test]
 fn test_websocket_http_url() {
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(r#"ws "http://example.com""#);
 
@@ -532,7 +532,7 @@ fn test_websocket_zero_timeout() {
 	let server = MockWebSocketServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(&format!(r#"echo "test" | ws "{}" --max-time 0sec"#, server.url()));
 
@@ -546,7 +546,7 @@ fn test_websocket_multiple_headers() {
 	let server = MockWebSocketServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(&format!(
 		r#"ws "{}" --headers {{ "Authorization": "Bearer token123", "X-Client-ID": "test-client", "X-Version": "1.0" }}"#,
@@ -610,7 +610,7 @@ fn test_websocket_server_closes_early() {
 	let server = EarlyCloseServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(&format!(r#"echo "test" | ws "{}" --max-time 2sec"#, server.url()));
 
@@ -620,7 +620,7 @@ fn test_websocket_server_closes_early() {
 
 #[test]
 fn test_websocket_wss_url() {
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	// This will fail to connect but should handle wss:// URLs properly
 	let result = plugin_test.eval(r#"ws "wss://echo.websocket.org" --max-time 1sec"#);
@@ -632,7 +632,7 @@ fn test_websocket_wss_url() {
 
 #[test]
 fn test_websocket_port_in_url() {
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	let result = plugin_test.eval(r#"ws "ws://127.0.0.1:99999" --max-time 1sec"#);
 
@@ -644,7 +644,7 @@ fn test_websocket_path_in_url() {
 	let server = MockWebSocketServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 
 	// Test URL with path
 	let url_with_path = format!(
@@ -664,7 +664,7 @@ fn test_persistent_websocket_session_lifecycle() {
 	let server = MockWebSocketServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 	let session_name = "session-lifecycle-test";
 
 	let opened = eval_to_value(
@@ -695,7 +695,7 @@ fn test_persistent_websocket_prunes_closed_sessions() {
 	let server = EarlyCloseServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 	let session_name = "session-prune-closed-test";
 
 	plugin_test
@@ -732,7 +732,7 @@ fn test_persistent_websocket_send_and_receive() {
 	let server = MockWebSocketServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 	let session_name = "session-send-recv-test";
 
 	plugin_test
@@ -779,7 +779,7 @@ fn test_persistent_websocket_send_json_and_recv_json() {
 	let server = MockCdpServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 	let session_name = "session-send-json-test";
 
 	plugin_test
@@ -832,7 +832,7 @@ fn test_persistent_websocket_await_response_and_next_event() {
 	let server = MockCdpServer::new();
 	server.start();
 
-	let mut plugin_test = PluginTest::new("ws", WebSocketPlugin.into()).expect("Failed to create plugin test");
+	let mut plugin_test = PluginTest::new("ws", NusurfPlugin.into()).expect("Failed to create plugin test");
 	let session_name = "session-await-event-test";
 
 	plugin_test

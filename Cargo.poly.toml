@@ -1,20 +1,20 @@
 [package]
 authors = ["Alex Johnson <alex.kattathra.johnson@gmail.com>", "Albert O'Shea"]
-repository = "https://github.com/alex-kattathra-johnson/nu_plugin_ws"
+repository = "https://github.com/alex-kattathra-johnson/nusurf"
 readme = "README.md"
 license = "MIT"
-name = "nu-plugin-ws"
+name = "nusurf"
 description = "A Nushell plugin for easily streaming output from websocket endpoints"
 version = "1.0.6"
 edition = "2024"
 autobins = false
 
 [[bin]]
-name = "nu_plugin_ws"
+name = "nu_plugin_nusurf"
 path = "src/main.rs"
 
 [[bin]]
-name = "nu_ws_live_fixture_server"
+name = "nusurf_live_fixture_server"
 path = "src/bin/live_fixture_server.rs"
 
 [dependencies]

@@ -7,7 +7,7 @@
 
 let
   standaloneProjectRoot = toString ./.;
-  nuPluginWs = pkgs.rustPlatform.buildRustPackage {
+  nusurf = pkgs.rustPlatform.buildRustPackage {
     pname = config.rustEnv.package.name;
     version = config.rustEnv.package.version;
     src = config.outputs.cargo_source_tree;
@@ -58,7 +58,7 @@ in
     '';
   };
 
-  outputs.nu-plugin-ws = nuPluginWs;
+  outputs.nusurf = nusurf;
 
   enterShell = ''
     echo "Run: show-cargo-manifest"

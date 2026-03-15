@@ -1275,20 +1275,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nu-plugin-ws"
-version = "1.0.6"
-dependencies = [
- "nu-plugin",
- "nu-plugin-test-support",
- "nu-protocol",
- "nu-test-support",
- "serde_json",
- "tracing",
- "tracing-subscriber",
- "tungstenite",
-]
-
-[[package]]
 name = "nu-protocol"
 version = "0.111.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1418,6 +1404,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c7398b9c8b70908f6371f47ed36737907c87c52af34c268fed0bf0ceb92ead9"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "nusurf"
+version = "1.0.6"
+dependencies = [
+ "nu-plugin",
+ "nu-plugin-test-support",
+ "nu-protocol",
+ "nu-test-support",
+ "serde_json",
+ "tracing",
+ "tracing-subscriber",
+ "tungstenite",
 ]
 
 [[package]]

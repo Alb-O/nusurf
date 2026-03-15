@@ -1,4 +1,4 @@
-# nu-plugin-ws
+# nusurf
 
 A [Nushell](https://nushell.sh) plugin for WebSocket I/O, plus a Nu-first Chrome DevTools Protocol layer for browser automation and inspection.
 
@@ -135,8 +135,8 @@ devenv-run -C . cargo test --test nushell_tests --test nushell_cdp_tests --test 
 Run the live browser suites:
 
 ```bash
-devenv-run -C . cargo build --bin nu_plugin_ws --bin nu_ws_live_fixture_server --all-features
-devenv-run -C . nu --no-config-file --plugins target/debug/nu_plugin_ws -- tests/run_live_browser_suite.nu browser_all
+devenv-run -C . cargo build --bin nu_plugin_nusurf --bin nusurf_live_fixture_server --all-features
+devenv-run -C . nu --no-config-file --plugins target/debug/nu_plugin_nusurf -- tests/run_live_browser_suite.nu browser_all
 ```
 
 Add `--verbose` to `tests/run_live_browser_suite.nu` to print per-script stdout and stderr even on success.

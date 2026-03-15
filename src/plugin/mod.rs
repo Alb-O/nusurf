@@ -9,9 +9,9 @@ use {
 };
 
 /// Nushell plugin implementation for the `ws` command family.
-pub struct WebSocketPlugin;
+pub struct NusurfPlugin;
 
-impl Plugin for WebSocketPlugin {
+impl Plugin for NusurfPlugin {
 	fn version(&self) -> String {
 		env!("CARGO_PKG_VERSION").into()
 	}

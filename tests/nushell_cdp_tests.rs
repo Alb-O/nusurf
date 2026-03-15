@@ -12,7 +12,7 @@ use {
 };
 
 fn build_plugin_binary() -> PathBuf {
-	PathBuf::from(env!("CARGO_BIN_EXE_nu_plugin_ws"))
+	PathBuf::from(env!("CARGO_BIN_EXE_nu_plugin_nusurf"))
 }
 
 struct MockCdpServer {

@@ -124,7 +124,7 @@ fn nushell_ws_tests_pass() {
 	let server = MockCdpServer::new();
 	server.start();
 
-	let plugin_path = PathBuf::from(env!("CARGO_BIN_EXE_nu_plugin_ws"));
+	let plugin_path = PathBuf::from(env!("CARGO_BIN_EXE_nu_plugin_nusurf"));
 	let script_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/ws/basic.nu");
 	let output = Command::new("nu")
 		.arg("--no-config-file")
