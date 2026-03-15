@@ -15,7 +15,7 @@ One-line for non-script cmds, simple lists/records in scripts, pipelines under 8
 Note where spaces should and shouldn't go
 
 ```nu
-# Correct examples
+# correct examples
 [[status]; [UP] [UP]] | all {|el| $el.status == UP }
 [1 2 3 4] | reduce {|elt, acc| $elt + $acc }
 {x: 1, y: 2}
@@ -36,7 +36,7 @@ Put each list item on its own line in multi-line lists
 Break around brackets only when it helps structure; avoid lines with single lone parenthesis
 
 ```nu
-# Correct examples
+# correct examples
 [[status]; [UP] [UP]] | all {|el|
     $el.status == UP
 }
@@ -60,7 +60,7 @@ Env vars SCREAMING_SNAKE_CASE
 Flag vals use underscores in Nushell vars even if the flag name uses dashes
 
 ```nu
-# Correct examples
+# correct examples
 def "login basic-auth" [username: string password: string --all-caps] {}
 let user_id = 123
 $env.APP_VERSION = "1.0.0"
