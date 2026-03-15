@@ -7,6 +7,7 @@ def main [http_port: int, expected_ws_url: string] {
     test cdp call and event $http_port
     test cdp schema validation $http_port
     test cdp session completion $http_port
+    test cdp command completion metadata
 }
 
 def "test cdp discover" [http_port: int, expected_ws_url: string] {
@@ -38,6 +39,9 @@ def "test cdp call and event" [http_port: int] {
 
     let missing = (cdp event $session "Missing.event" --no-validate --max-time 100ms)
     assert equal ($missing | describe) "nothing"
+
+    let no_param = (cdp call $session "Page.enable" --id 42)
+    assert equal $no_param.echoMethod "Page.enable"
 
     cdp close $session | ignore
 }
@@ -109,4 +113,30 @@ def "test cdp session completion" [http_port: int] {
     )
 
     cdp close $session | ignore
+}
+
+def "test cdp command completion metadata" [] {
+    let call_signature = (scope commands | where name == "cdp call" | get 0.signatures.any)
+    let event_signature = (scope commands | where name == "cdp event" | get 0.signatures.any)
+
+    assert equal (
+        $call_signature
+        | where parameter_name == "session"
+        | get 0.completion
+    ) "complete-cdp-session"
+    assert equal (
+        $call_signature
+        | where parameter_name == "method"
+        | get 0.completion
+    ) "complete-cdp-command"
+    assert equal (
+        $event_signature
+        | where parameter_name == "session"
+        | get 0.completion
+    ) "complete-cdp-session"
+    assert equal (
+        $event_signature
+        | where parameter_name == "method"
+        | get 0.completion
+    ) "complete-cdp-event"
 }

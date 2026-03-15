@@ -161,6 +161,12 @@ def suite-scripts [suite: string] {
     $scripts
 }
 
+def active-suite-scripts [suite: string] {
+    suite-scripts $suite | where {|script|
+        not (($script | get -o ignore) | default false)
+    }
+}
+
 def wait-for-file-content [path: string, max_time: duration] {
     let deadline = (date now) + $max_time
 
@@ -229,7 +235,7 @@ export def "run-live-browser-suite" [
     }
 
     let chosen_port = ($port | default (random int 20000..60000))
-    let scripts = (suite-scripts $suite)
+    let scripts = (active-suite-scripts $suite)
     let script_count = ($scripts | length)
     let needs_fixture = ($scripts | any {|script| $script.needsFixture })
 
@@ -240,6 +246,11 @@ export def "run-live-browser-suite" [
     }
 
     let suite_started_at = (date now)
+
+    if $script_count == 0 {
+        print-table (suite-summary-record $suite 0 ((date now) - $suite_started_at) [] "ok") --expanded
+        return
+    }
 
     let browser_workflow = (
         cdp browser start --browser $browser --port $chosen_port --name $"runner-browser-($chosen_port)" --max-time (

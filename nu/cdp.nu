@@ -22,6 +22,10 @@ export use cdp/page.nu [
     "cdp page list"
     "cdp page close"
     "cdp page goto"
+    "cdp page wait"
+    "cdp page query"
+    "cdp page click"
+    "cdp page fill"
     "cdp page eval"
 ]
 

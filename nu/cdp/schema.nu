@@ -227,13 +227,14 @@ def validate-command-params [method: string, params: any, command: record] {
         | get name
     )
 
-    let param_record = match ($params | describe) {
-        "nothing" => {}
-        $param_type if ($param_type | str starts-with "record") => $params
-        $param_type => {
-            error make {
-                msg: $"CDP command ($method) params must be a record, got: ($param_type)"
-            }
+    let param_type = ($params | describe)
+    let param_record = if $param_type == "nothing" {
+        {}
+    } else if ($param_type | str starts-with "record") {
+        $params
+    } else {
+        error make {
+            msg: $"CDP command ($method) params must be a record, got: ($param_type)"
         }
     }
 
@@ -283,42 +284,42 @@ export def "cdp schema domains" [] {
 
 # List protocol commands, optionally filtered by domain.
 export def "cdp schema commands" [
-    domain?: string # Domain name to filter on.
+    domain?: string@complete-cdp-domain # Domain name to filter on.
 ] {
     schema-commands $domain
 }
 
 # List protocol events, optionally filtered by domain.
 export def "cdp schema events" [
-    domain?: string # Domain name to filter on.
+    domain?: string@complete-cdp-domain # Domain name to filter on.
 ] {
     schema-events $domain
 }
 
 # List protocol types, optionally filtered by domain.
 export def "cdp schema types" [
-    domain?: string # Domain name to filter on.
+    domain?: string@complete-cdp-domain # Domain name to filter on.
 ] {
     schema-types $domain
 }
 
 # Show one protocol command by qualified name.
 export def "cdp schema command" [
-    qualified: string # Qualified CDP command name.
+    qualified: string@complete-cdp-command # Qualified CDP command name.
 ] {
     schema-lookup "command" $qualified
 }
 
 # Show one protocol event by qualified name.
 export def "cdp schema event" [
-    qualified: string # Qualified CDP event name.
+    qualified: string@complete-cdp-event # Qualified CDP event name.
 ] {
     schema-lookup "event" $qualified
 }
 
 # Show one protocol type by qualified name.
 export def "cdp schema type" [
-    qualified: string # Qualified CDP type name.
+    qualified: string@complete-cdp-type # Qualified CDP type name.
 ] {
     schema-lookup "type" $qualified
 }
@@ -337,21 +338,21 @@ export def "cdp schema search" [
 
 # Search only protocol commands with one query string.
 export def "cdp schema search commands" [
-    query: string # Search text to match against qualified names and descriptions.
+    query: string@complete-cdp-command # Search text to match against qualified names and descriptions.
 ] {
     search-results "command" $query
 }
 
 # Search only protocol events with one query string.
 export def "cdp schema search events" [
-    query: string # Search text to match against qualified names and descriptions.
+    query: string@complete-cdp-event # Search text to match against qualified names and descriptions.
 ] {
     search-results "event" $query
 }
 
 # Search only protocol types with one query string.
 export def "cdp schema search types" [
-    query: string # Search text to match against qualified names and descriptions.
+    query: string@complete-cdp-type # Search text to match against qualified names and descriptions.
 ] {
     search-results "type" $query
 }

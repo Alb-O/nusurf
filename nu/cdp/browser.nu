@@ -240,7 +240,7 @@ export def "cdp browser wait" [
 export def "cdp browser open" [
     target: any = 9222 # Browser port, discovery URL, websocket URL, or version record.
     --name(-n): string = "browser" # Session name to register locally.
-    --raw-buffer(-r): int = 0 # Number of raw websocket messages to retain for `ws recv`.
+    --raw-buffer(-r): int = 128 # Number of raw websocket messages to retain for `ws recv`.
     --max-time(-m): duration = 10sec # Maximum time to wait for the browser target.
     --interval(-i): duration = 100ms # Delay between discovery attempts.
 ] {
@@ -252,7 +252,7 @@ export def "cdp browser start" [
     --browser(-b): string # Explicit browser path or command name to launch.
     --port(-p): int = 9222 # Remote debugging port to attach on.
     --name(-n): string = "browser" # Session name to register locally.
-    --raw-buffer(-r): int = 0 # Number of raw websocket messages to retain for `ws recv`.
+    --raw-buffer(-r): int = 128 # Number of raw websocket messages to retain for `ws recv`.
     --headless(-h) = true # Launch Chromium headless by default.
     --user-data-dir(-u): string # Browser profile directory; a temp dir is used by default.
     --url: string = "about:blank" # Initial URL to open after launch.

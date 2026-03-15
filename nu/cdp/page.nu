@@ -167,6 +167,266 @@ def page-ws-url [browser_session: string, target_id: string] {
     $"($root)/devtools/page/($target_id)"
 }
 
+const page_wait_states = [
+    {
+        value: "present"
+        description: "Selector resolves to at least one element"
+    }
+    {
+        value: "visible"
+        description: "A matching element exists and is visible"
+    }
+    {
+        value: "hidden"
+        description: "Matching elements exist but none are visible"
+    }
+    {
+        value: "gone"
+        description: "No matching element remains"
+    }
+]
+
+def js-literal [value: any] {
+    $value | default null | to json -r
+}
+
+def dom-helper-expression [
+    selector: string
+    text?: any
+    action: string = "inspect"
+    value?: any
+] {
+    let selector_json = (js-literal $selector)
+    let text_json = (js-literal $text)
+    let action_json = (js-literal $action)
+    let value_json = (js-literal $value)
+
+    [
+        "(function () {"
+        $"  const selector = ($selector_json);"
+        $"  const textNeedle = ($text_json);"
+        $"  const action = ($action_json);"
+        $"  const fillValue = ($value_json);"
+        "  const hasText = textNeedle !== null;"
+        "  const isVisible = (element) => {"
+        "    const style = window.getComputedStyle(element);"
+        "    if (style === null) {"
+        "      return false;"
+        "    }"
+        "    if (style.display === 'none' || style.visibility === 'hidden') {"
+        "      return false;"
+        "    }"
+        "    return element.getClientRects().length > 0;"
+        "  };"
+        "  const normalize = (element) => ({"
+        "    selector,"
+        "    tag: element.tagName.toLowerCase(),"
+        "    id: element.id || null,"
+        "    classes: Array.from(element.classList),"
+        "    text: element.textContent ?? '',"
+        "    value: 'value' in element ? element.value : null,"
+        "    visible: isVisible(element),"
+        "    disabled: !!element.disabled,"
+        "    href: element.href ?? null,"
+        "    html: element.outerHTML ?? null,"
+        "  });"
+        "  const records = [];"
+        "  let firstRecord = null;"
+        "  let firstVisibleRecord = null;"
+        "  let visibleCount = 0;"
+        "  for (const element of document.querySelectorAll(selector)) {"
+        "    if (hasText && !(element.textContent ?? '').includes(textNeedle)) {"
+        "      continue;"
+        "    }"
+        "    if (action === 'click') {"
+        "      const record = normalize(element);"
+        "      element.scrollIntoView({ block: 'center', inline: 'center' });"
+        "      if (typeof element.focus === 'function') {"
+        "        element.focus();"
+        "      }"
+        "      element.click();"
+        "      return record;"
+        "    }"
+        "    if (action === 'fill') {"
+        "      if ('value' in element) {"
+        "        element.value = fillValue;"
+        "      } else {"
+        "        element.setAttribute('value', fillValue);"
+        "      }"
+        "      element.dispatchEvent(new Event('input', { bubbles: true }));"
+        "      element.dispatchEvent(new Event('change', { bubbles: true }));"
+        "      return normalize(element);"
+        "    }"
+        "    const record = normalize(element);"
+        "    if (firstRecord === null) {"
+        "      firstRecord = record;"
+        "    }"
+        "    if (record.visible) {"
+        "      visibleCount += 1;"
+        "      if (firstVisibleRecord === null) {"
+        "        firstVisibleRecord = record;"
+        "      }"
+        "    }"
+        "    records.push(record);"
+        "  }"
+        "  if (action !== 'inspect') {"
+        "    return null;"
+        "  }"
+        "  return {"
+        "    selector,"
+        "    matches: records,"
+        "    first: firstRecord,"
+        "    firstVisible: firstVisibleRecord,"
+        "    visibleCount,"
+        "  };"
+        "})()"
+    ] | str join "\n"
+}
+
+def inspect-page-elements [
+    selector: string
+    --text: any
+    --page(-p): any
+    --max-time(-m): duration = 30sec
+] {
+    cdp page eval (dom-helper-expression $selector $text) --page $page --max-time $max_time
+}
+
+def act-on-page-element [
+    selector: string
+    action: string
+    --value: any
+    --page(-p): any
+    --max-time(-m): duration = 30sec
+] {
+    cdp page eval (dom-helper-expression $selector null $action $value) --page $page --max-time $max_time
+}
+
+def run-page-action [
+    selector: string
+    action: string
+    max_time: duration
+    interval: duration
+    --value: any
+    --page(-p): any
+] {
+    let deadline = (date now) + $max_time
+
+    loop {
+        let result = (
+            act-on-page-element $selector $action --value $value --page $page --max-time $max_time
+        )
+
+        if $result != null {
+            return $result
+        }
+
+        if ((date now) >= $deadline) {
+            error make {
+                msg: (selector-timeout-message $selector "present" $max_time)
+            }
+        }
+
+        sleep $interval
+    }
+}
+
+def state-is-valid [state: string] {
+    $page_wait_states | any {|entry| $entry.value == $state }
+}
+
+def wait-state-match [inspection: record, state: string] {
+    let first = ($inspection | get -o first)
+    let first_visible = ($inspection | get -o firstVisible)
+    let visible_count = ($inspection | get -o visibleCount | default 0)
+
+    match $state {
+        "present" => {
+            matched: ($first != null)
+            value: $first
+        }
+        "visible" => {
+            matched: ($first_visible != null)
+            value: $first_visible
+        }
+        "hidden" => {
+            matched: (($first != null) and ($visible_count == 0))
+            value: $first
+        }
+        "gone" => {
+            matched: ($first == null)
+            value: null
+        }
+    }
+}
+
+def selector-timeout-message [
+    selector: string
+    state: string
+    max_time: duration
+    text?: any
+] {
+    let text_suffix = if $text == null {
+        ""
+    } else {
+        $" with text containing ($text | into string)"
+    }
+
+    $"Timed out waiting for selector ($selector) to become ($state) within ($max_time)($text_suffix)"
+}
+
+def wait-for-page-selector [
+    selector: string
+    state: string
+    max_time: duration
+    interval: duration
+    --text: any
+    --page(-p): any
+] {
+    if (not (state-is-valid $state)) {
+        error make {
+            msg: $"Unsupported page wait state: ($state)"
+        }
+    }
+
+    let deadline = (date now) + $max_time
+
+    loop {
+        let inspection = (inspect-page-elements $selector --text $text --page $page --max-time $max_time)
+        let state_match = (wait-state-match $inspection $state)
+
+        if $state_match.matched {
+            return $state_match.value
+        }
+
+        if ((date now) >= $deadline) {
+            error make {
+                msg: (selector-timeout-message $selector $state $max_time $text)
+            }
+        }
+
+        sleep $interval
+    }
+}
+
+export def complete-cdp-page-wait-state [
+    context: string
+] {
+    let needle = ($context | split words | last | default "" | str downcase)
+
+    {
+        options: {
+            completion_algorithm: substring
+            sort: true
+            case_sensitive: false
+        }
+        completions: (
+            $page_wait_states
+            | where {|state| ($state.value | str downcase | str contains $needle) }
+        )
+    }
+}
+
 # Set the current browser and/or page context for agent-friendly CDP commands.
 export def --env "cdp use" [
     context?: any # Browser/page record or websocket session name to make current.
@@ -258,7 +518,7 @@ export def "cdp page new" [
     --browser(-b): any # Browser record or websocket session name; defaults to the current browser.
     --name(-n): string # Page websocket session name to register locally.
     --url(-u): string = "about:blank" # Initial URL to open in the new page target.
-    --raw-buffer(-r): int = 0 # Number of raw websocket messages to retain for `ws recv`.
+    --raw-buffer(-r): int = 128 # Number of raw websocket messages to retain for `ws recv`.
     --max-time(-m): duration = 30sec # Maximum time to wait for target creation and setup.
 ] {
     let browser_context = (resolve-browser-context $browser)
@@ -347,8 +607,18 @@ export def "cdp page goto" [
     url: string # URL to navigate the page to.
     --page(-p): any # Page record or websocket session name; defaults to the current page.
     --max-time(-m): duration = 30sec # Maximum time to wait for navigation and load.
+    --wait-for: string # CSS selector to wait for after the normal navigation wait.
+    --wait-state: string@complete-cdp-page-wait-state = "present" # Selector wait state when using `--wait-for`.
+    --wait-text: string # Optional text substring filter for selector waits.
+    --interval(-i): duration = 100ms # Delay between selector wait attempts.
     --no-wait # Return after `Page.navigate` instead of waiting for `Page.loadEventFired`.
 ] {
+    if (($no_wait == true) and ($wait_for != null)) {
+        error make {
+            msg: "`cdp page goto` cannot combine --no-wait with --wait-for"
+        }
+    }
+
     let page_context = (resolve-page-context $page)
     let navigation = (
         cdp call $page_context.session "Page.navigate" {
@@ -360,7 +630,61 @@ export def "cdp page goto" [
         cdp event $page_context.session "Page.loadEventFired" --max-time $max_time | ignore
     }
 
+    if $wait_for != null {
+        wait-for-page-selector $wait_for $wait_state $max_time $interval --text $wait_text --page $page_context
+        | ignore
+    }
+
     $navigation
+}
+
+# Wait for a page selector to reach a target state.
+export def "cdp page wait" [
+    selector: string # CSS selector to wait for.
+    --state: string@complete-cdp-page-wait-state = "present" # Wait condition: present, visible, hidden, or gone.
+    --text: string # Optional text substring that matching elements must contain.
+    --max-time(-m): duration = 30sec # Maximum time to wait for the selector state.
+    --interval(-i): duration = 100ms # Delay between selector checks.
+    --page(-p): any # Page record or websocket session name; defaults to the current page.
+] {
+    wait-for-page-selector $selector $state $max_time $interval --text $text --page $page
+}
+
+# Query page elements and return the first match or all matches.
+export def "cdp page query" [
+    selector: string # CSS selector to inspect.
+    --all # Return every match instead of only the first match.
+    --page(-p): any # Page record or websocket session name; defaults to the current page.
+    --max-time(-m): duration = 30sec # Maximum time to wait for the evaluation result.
+] {
+    let inspection = (inspect-page-elements $selector --page $page --max-time $max_time)
+
+    if $all {
+        $inspection | get matches
+    } else {
+        $inspection | get -o first
+    }
+}
+
+# Click the first matching page element after it appears.
+export def "cdp page click" [
+    selector: string # CSS selector to click.
+    --max-time(-m): duration = 30sec # Maximum time to wait for the element to appear.
+    --interval(-i): duration = 100ms # Delay between selector checks.
+    --page(-p): any # Page record or websocket session name; defaults to the current page.
+] {
+    run-page-action $selector "click" $max_time $interval --page $page
+}
+
+# Fill the first matching page element after it appears.
+export def "cdp page fill" [
+    selector: string # CSS selector to fill.
+    value: string # New value to assign to the element.
+    --max-time(-m): duration = 30sec # Maximum time to wait for the element to appear.
+    --interval(-i): duration = 100ms # Delay between selector checks.
+    --page(-p): any # Page record or websocket session name; defaults to the current page.
+] {
+    run-page-action $selector "fill" $max_time $interval --value $value --page $page
 }
 
 # Evaluate JavaScript in a page, defaulting to the current page context.

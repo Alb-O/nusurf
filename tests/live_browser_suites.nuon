@@ -9,11 +9,18 @@
       needsFixture: false
     }
     {
+      # exercises very large screenshot/pdf payloads
+      # opt-in if ok with waiting
       path: "tests/cdp/browser/large_artifacts.nu"
       needsFixture: false
+      ignore: true
     }
     {
       path: "tests/cdp/browser/page_workflow.nu"
+      needsFixture: false
+    }
+    {
+      path: "tests/cdp/browser/page_dom.nu"
       needsFixture: false
     }
   ]
@@ -41,11 +48,18 @@
       needsFixture: false
     }
     {
+      # exercises very large screenshot/pdf payloads
+      # opt-in if ok with waiting
       path: "tests/cdp/browser/large_artifacts.nu"
       needsFixture: false
+      ignore: true
     }
     {
       path: "tests/cdp/browser/page_workflow.nu"
+      needsFixture: false
+    }
+    {
+      path: "tests/cdp/browser/page_dom.nu"
       needsFixture: false
     }
     {
@@ -64,6 +78,10 @@
   "page-workflow": [
     {
       path: "tests/cdp/browser/page_workflow.nu"
+      needsFixture: false
+    }
+    {
+      path: "tests/cdp/browser/page_dom.nu"
       needsFixture: false
     }
   ]

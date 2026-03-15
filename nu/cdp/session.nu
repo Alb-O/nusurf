@@ -102,8 +102,8 @@ export def "cdp open" [
 
 # Send a validated CDP command and await its response.
 export def "cdp call" [
-    session: string # Open websocket session name.
-    method: string # Qualified CDP command name.
+    session: string@complete-cdp-session # Open websocket session name.
+    method: string@complete-cdp-command # Qualified CDP command name.
     params?: any # Command params record.
     --id: int # Explicit request id to use.
     --session-id(-s): string # Attached target session id.
@@ -154,8 +154,8 @@ export def "cdp call" [
 
 # Read the next CDP event, optionally filtered by method or attached session.
 export def "cdp event" [
-    session: string # Open websocket session name.
-    method?: string # Qualified CDP event name to filter on.
+    session: string@complete-cdp-session # Open websocket session name.
+    method?: string@complete-cdp-event # Qualified CDP event name to filter on.
     --session-id(-s): string # Attached target session id to filter on.
     --no-validate # Skip schema validation before listening.
     --max-time(-m): duration = 30sec # Maximum time to wait for an event.
@@ -174,7 +174,7 @@ export def "cdp event" [
 
 # Attach a browser session to a target and return the attached session metadata.
 export def "cdp attach" [
-    session: string # Browser websocket session name.
+    session: string@complete-cdp-session # Browser websocket session name.
     target: any # Target id or target record.
     --flatten(-f) = true # Request flattened session routing.
     --max-time(-m): duration = 30sec # Maximum time to wait for the attach result.
@@ -187,7 +187,7 @@ export def "cdp attach" [
 
 # Detach an attached target session from the browser session.
 export def "cdp detach" [
-    session: string # Browser websocket session name.
+    session: string@complete-cdp-session # Browser websocket session name.
     attached_session: any # Attached session id or attached session record.
     --max-time(-m): duration = 30sec # Maximum time to wait for the detach result.
 ] {
@@ -198,7 +198,7 @@ export def "cdp detach" [
 
 # Close a websocket session by name.
 export def "cdp close" [
-    session: string # Open websocket session name.
+    session: string@complete-cdp-session # Open websocket session name.
 ] {
     ws close $session
 }

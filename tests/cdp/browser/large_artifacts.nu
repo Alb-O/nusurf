@@ -2,6 +2,39 @@ use std/assert
 use cdp.nu *
 use cdp_live.nu *
 
+def capture-page-artifacts [http_port: int, target_id: string] {
+    let artifact_session = "page-large-artifacts-capture"
+    let ws_url = (wait-for-target-ws $http_port $target_id)
+
+    # use a fresh page session for the oversized artifact responses.
+    # in live runs, the page state stayed healthy and a second session could
+    # fetch the screenshot/pdf promptly, while the original setup session could
+    # sit waiting on the same response for minutes. keeping setup and giant
+    # artifact reads on separate sockets makes the suite deterministic without
+    # changing the transport layer.
+    cdp open $ws_url --name $artifact_session | ignore
+
+    try {
+        let screenshot = (
+            cdp call $artifact_session "Page.captureScreenshot" { format: "png" } --max-time 45sec
+        )
+        let pdf = (
+            cdp call $artifact_session "Page.printToPDF" {
+                printBackground: true
+                paperWidth: 8.27
+                paperHeight: 11.69
+            } --max-time 45sec
+        )
+
+        {
+            screenshot: $screenshot
+            pdf: $pdf
+        }
+    } finally {
+        try { cdp close $artifact_session | ignore }
+    }
+}
+
 def main [http_port: int] {
     cdp open (cdp discover $http_port) --name "browser-large-artifacts" | ignore
 
@@ -42,18 +75,15 @@ def main [http_port: int] {
                 )
                 returnByValue: true
                 awaitPromise: true
-            } --max-time 120sec | ignore
+            # the canvas build is the slow setup step before the large payload
+            # commands. keep its timeout generous, but bounded, so we fail fast
+            # on real setup regressions instead of misattributing the delay to
+            # the later screenshot/pdf capture.
+            } --max-time 60sec | ignore
 
-            let screenshot = (
-                cdp call $page.session "Page.captureScreenshot" { format: "png" } --max-time 180sec
-            )
-            let pdf = (
-                cdp call $page.session "Page.printToPDF" {
-                    printBackground: true
-                    paperWidth: 8.27
-                    paperHeight: 11.69
-                } --max-time 60sec
-            )
+            let artifacts = (capture-page-artifacts $http_port $page.targetId)
+            let screenshot = $artifacts.screenshot
+            let pdf = $artifacts.pdf
 
             assert (
                 ($screenshot.data | str length) > 50000000

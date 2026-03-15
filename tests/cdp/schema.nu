@@ -1,9 +1,11 @@
 use std/assert
 use cdp.nu *
+use cdp/page.nu [complete-cdp-page-wait-state]
 use cdp/schema.nu [
     complete-cdp-command
     complete-cdp-domain
     complete-cdp-event
+    complete-cdp-type
 ]
 
 def main [] {
@@ -45,4 +47,40 @@ def main [] {
 
     let event_completions = (complete-cdp-event "cdp event browser Page.loa")
     assert (($event_completions.completions | where value == "Page.loadEventFired" | length) == 1)
+
+    let type_completions = (complete-cdp-type "cdp schema type Target.Sess")
+    assert (($type_completions.completions | where value == "Target.SessionID" | length) == 1)
+
+    let wait_state_completions = (complete-cdp-page-wait-state "cdp page wait #app --state vi")
+    assert (($wait_state_completions.completions | where value == "visible" | length) == 1)
+
+    let schema_commands_signature = (scope commands | where name == "cdp schema commands" | get 0.signatures.any)
+    let schema_command_signature = (scope commands | where name == "cdp schema command" | get 0.signatures.any)
+    let schema_search_signature = (
+        scope commands
+        | where name == "cdp schema search commands"
+        | get 0.signatures.any
+    )
+    let page_wait_signature = (scope commands | where name == "cdp page wait" | get 0.signatures.any)
+
+    assert equal (
+        $schema_commands_signature
+        | where parameter_name == "domain"
+        | get 0.completion
+    ) "complete-cdp-domain"
+    assert equal (
+        $schema_command_signature
+        | where parameter_name == "qualified"
+        | get 0.completion
+    ) "complete-cdp-command"
+    assert equal (
+        $schema_search_signature
+        | where parameter_name == "query"
+        | get 0.completion
+    ) "complete-cdp-command"
+    assert equal (
+        $page_wait_signature
+        | where parameter_name == "state"
+        | get 0.completion
+    ) "complete-cdp-page-wait-state"
 }
