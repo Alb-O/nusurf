@@ -24,7 +24,6 @@ nu-plugin = true
 nu-protocol = true
 serde_json = true
 tungstenite = { features = ["native-tls"] }
-url = true
 
 [dev-dependencies]
 nu-plugin-test-support = true

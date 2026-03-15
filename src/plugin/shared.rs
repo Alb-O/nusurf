@@ -1,5 +1,5 @@
 use {
-	crate::ws::client::ReceivedMessage,
+	crate::ws::client::{ReceivedMessage, WebSocketUrl},
 	nu_protocol::{LabeledError, Record, Value},
 	std::time::Duration,
 };
@@ -23,7 +23,7 @@ pub(super) fn init_logging(verbose: Option<Value>) {
 		.try_init();
 }
 
-pub(super) fn validate_ws_scheme(url: &url::Url, span: nu_protocol::Span) -> Result<(), LabeledError> {
+pub(super) fn validate_ws_scheme(url: &WebSocketUrl, span: nu_protocol::Span) -> Result<(), LabeledError> {
 	if ["ws", "wss"].contains(&url.scheme()) {
 		Ok(())
 	} else {

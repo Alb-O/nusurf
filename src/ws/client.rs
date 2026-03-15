@@ -24,7 +24,6 @@ use {
 		protocol::WebSocketConfig,
 		stream::{MaybeTlsStream, NoDelay},
 	},
-	url::Url,
 };
 
 const SOCKET_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -92,6 +91,88 @@ struct SessionQueues {
 enum ControlFlow {
 	Continue,
 	Closed,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// Parsed WebSocket URL fields needed by the plugin runtime.
+pub struct WebSocketUrl {
+	raw: String,
+	scheme: String,
+	host: String,
+	port: Option<u16>,
+}
+
+impl WebSocketUrl {
+	fn parse(raw: String) -> Option<Self> {
+		let scheme_end = raw.find("://")?;
+		let scheme = raw[..scheme_end].to_ascii_lowercase();
+		if scheme.is_empty() {
+			return None;
+		}
+
+		let remainder = &raw[scheme_end + 3..];
+		if remainder.is_empty() {
+			return None;
+		}
+
+		let authority_end = remainder.find(['/', '?', '#']).unwrap_or(remainder.len());
+		let authority = &remainder[..authority_end];
+		let host_port = authority.rsplit_once('@').map_or(authority, |(_, host_port)| host_port);
+		let (host, port) = split_host_port(host_port)?;
+
+		Some(Self {
+			raw,
+			scheme,
+			host,
+			port,
+		})
+	}
+
+	pub fn as_str(&self) -> &str {
+		&self.raw
+	}
+
+	pub fn scheme(&self) -> &str {
+		&self.scheme
+	}
+
+	fn origin(&self) -> String {
+		match self.port {
+			Some(port) => format!("{}://{}:{}", self.scheme, self.host, port),
+			None => format!("{}://{}", self.scheme, self.host),
+		}
+	}
+}
+
+fn split_host_port(authority: &str) -> Option<(String, Option<u16>)> {
+	if authority.is_empty() {
+		return None;
+	}
+
+	if authority.starts_with('[') {
+		let host_end = authority.find(']')?;
+		let host = authority[..=host_end].to_string();
+		let remainder = &authority[host_end + 1..];
+
+		return match remainder {
+			"" => Some((host, None)),
+			_ => remainder
+				.strip_prefix(':')
+				.and_then(parse_port)
+				.map(|port| (host, Some(port))),
+		};
+	}
+
+	match authority.rsplit_once(':') {
+		Some((host, port)) if !host.is_empty() => parse_port(port).map(|port| (host.to_string(), Some(port))),
+		_ => Some((authority.to_string(), None)),
+	}
+}
+
+fn parse_port(port: &str) -> Option<u16> {
+	(!port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit()))
+		.then(|| port.parse().ok())
+		.flatten()
 }
 
 impl WebSocketClient {
@@ -295,7 +376,7 @@ impl SessionClient {
 
 /// Open a one-shot WebSocket connection suitable for the streaming `ws` command.
 pub fn connect(
-	url: Url, timeout: Option<Duration>, headers: HashMap<String, String>, signals: Signals, span: Span,
+	url: WebSocketUrl, timeout: Option<Duration>, headers: HashMap<String, String>, signals: Signals, span: Span,
 ) -> Option<(WebSocketClient, SessionHandle)> {
 	let websocket = open_websocket(url, headers)?;
 	let (tx, rx, closed) = connect_components(websocket)?;
@@ -304,7 +385,9 @@ pub fn connect(
 }
 
 /// Open a persistent WebSocket session with routed JSON response and event queues.
-pub fn connect_session(url: Url, headers: HashMap<String, String>, max_raw_messages: usize) -> Option<SessionClient> {
+pub fn connect_session(
+	url: WebSocketUrl, headers: HashMap<String, String>, max_raw_messages: usize,
+) -> Option<SessionClient> {
 	let websocket = open_websocket(url, headers)?;
 	let (tx, state, closed) = connect_session_components(websocket, max_raw_messages)?;
 	Some(SessionClient {
@@ -313,8 +396,8 @@ pub fn connect_session(url: Url, headers: HashMap<String, String>, max_raw_messa
 	})
 }
 
-fn open_websocket(url: Url, headers: HashMap<String, String>) -> Option<WebSocketStream> {
-	log::trace!("Building WebSocket request for: {url}");
+fn open_websocket(url: WebSocketUrl, headers: HashMap<String, String>) -> Option<WebSocketStream> {
+	log::trace!("Building WebSocket request for: {}", url.as_str());
 
 	let mut builder = ClientRequestBuilder::new(url.as_str().parse().ok()?);
 	let origin = websocket_origin(&url);
@@ -342,11 +425,8 @@ fn open_websocket(url: Url, headers: HashMap<String, String>) -> Option<WebSocke
 	}
 }
 
-fn websocket_origin(url: &Url) -> String {
-	match url.port() {
-		Some(port) => format!("{}://{}:{}", url.scheme(), url.host_str().unwrap_or_default(), port),
-		None => format!("{}://{}", url.scheme(), url.host_str().unwrap_or_default()),
-	}
+fn websocket_origin(url: &WebSocketUrl) -> String {
+	url.origin()
 }
 
 fn connect_components(
@@ -762,23 +842,18 @@ fn normal_close(reason: &'static str) -> tungstenite::protocol::CloseFrame {
 }
 
 #[allow(clippy::result_large_err)]
-/// Parse a Nushell URL argument into both its original string form and a `Url`.
+/// Parse a Nushell URL argument into both its original string form and parsed fields.
 ///
 /// The original string is returned because session metadata wants the exact
-/// caller-provided text, not a normalized serialization from `Url`.
-pub fn http_parse_url(call: &EvaluatedCall, span: Span, raw_url: Value) -> Result<(String, Url), ShellError> {
+/// caller-provided text, not a normalized serialization.
+pub fn http_parse_url(call: &EvaluatedCall, span: Span, raw_url: Value) -> Result<(String, WebSocketUrl), ShellError> {
 	let requested_url = raw_url.coerce_into_string()?;
-	let url = match Url::parse(&requested_url) {
-		Ok(u) => u,
-		Err(_e) => {
-			return Err(ShellError::UnsupportedInput {
-				msg: "Incomplete or incorrect URL. Expected a full URL, e.g., https://www.example.com".to_string(),
-				input: format!("value: '{requested_url:?}'"),
-				msg_span: call.head,
-				input_span: span,
-			});
-		}
-	};
+	let url = WebSocketUrl::parse(requested_url.clone()).ok_or_else(|| ShellError::UnsupportedInput {
+		msg: "Incomplete or incorrect URL. Expected a full URL, e.g., https://www.example.com".to_string(),
+		input: format!("value: '{requested_url:?}'"),
+		msg_span: call.head,
+		input_span: span,
+	})?;
 
 	Ok((requested_url, url))
 }
@@ -838,13 +913,36 @@ mod tests {
 
 	#[test]
 	fn websocket_origin_omits_missing_port() {
-		let url = Url::parse("wss://example.com/devtools/browser/abc").unwrap();
+		let url = WebSocketUrl::parse("wss://example.com/devtools/browser/abc".to_string()).unwrap();
 		assert_eq!(websocket_origin(&url), "wss://example.com");
 	}
 
 	#[test]
 	fn websocket_origin_keeps_explicit_port() {
-		let url = Url::parse("ws://127.0.0.1:9222/devtools/browser/abc").unwrap();
+		let url = WebSocketUrl::parse("ws://127.0.0.1:9222/devtools/browser/abc".to_string()).unwrap();
 		assert_eq!(websocket_origin(&url), "ws://127.0.0.1:9222");
+	}
+
+	#[test]
+	fn websocket_url_preserves_ipv6_brackets_in_origin() {
+		let url = WebSocketUrl::parse("ws://[::1]:9222/devtools/browser/abc".to_string()).unwrap();
+		assert_eq!(websocket_origin(&url), "ws://[::1]:9222");
+	}
+
+	#[test]
+	fn websocket_url_ignores_userinfo_for_origin() {
+		let url = WebSocketUrl::parse("wss://user:pass@example.com/socket".to_string()).unwrap();
+		assert_eq!(websocket_origin(&url), "wss://example.com");
+	}
+
+	#[test]
+	fn websocket_url_rejects_invalid_port() {
+		assert!(WebSocketUrl::parse("ws://127.0.0.1:99999/socket".to_string()).is_none());
+	}
+
+	#[test]
+	fn websocket_url_normalizes_scheme_case() {
+		let url = WebSocketUrl::parse("WSS://example.com/socket".to_string()).unwrap();
+		assert_eq!(websocket_origin(&url), "wss://example.com");
 	}
 }
