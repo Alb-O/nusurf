@@ -65,7 +65,8 @@ export def "wait-for-target-ws" [
         let ws_url = (
             http get $"http://127.0.0.1:($http_port)/json/list"
             | where id == $target_id
-            | get -o 0.webSocketDebuggerUrl
+            | get -o webSocketDebuggerUrl
+            | first
         )
 
         if (not (is nothing $ws_url)) {

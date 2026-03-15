@@ -33,19 +33,14 @@ pub(super) fn session_client(session_id: &str) -> Result<SessionClient, LabeledE
 	let mut sessions = sessions_mut()?;
 	prune_closed_sessions(&mut sessions);
 
-	let Some(is_closed) = sessions.get(session_id).map(|entry| entry.client.is_closed()) else {
-		return Err(LabeledError::new(format!("Session '{}' was not found", session_id)));
-	};
-
-	if is_closed {
-		sessions.remove(session_id);
-		return Err(LabeledError::new(format!("Session '{}' is closed", session_id)));
+	match sessions.get(session_id) {
+		Some(entry) if !entry.client.is_closed() => Ok(entry.client.clone()),
+		Some(_) => {
+			sessions.remove(session_id);
+			Err(LabeledError::new(format!("Session '{session_id}' is closed")))
+		}
+		None => Err(LabeledError::new(format!("Session '{session_id}' was not found"))),
 	}
-
-	sessions
-		.get(session_id)
-		.map(|entry| entry.client.clone())
-		.ok_or_else(|| LabeledError::new(format!("Session '{}' was not found", session_id)))
 }
 
 pub(super) fn sessions_mut() -> Result<MutexGuard<'static, HashMap<String, SessionEntry>>, LabeledError> {

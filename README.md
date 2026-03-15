@@ -126,10 +126,17 @@ Refresh the bundled CDP schema:
 devenv-run -C . update-cdp-schema
 ```
 
-Run the Rust test suite plus the mock-driven Nu coverage:
+Run the Rust test suite:
 
 ```bash
-devenv-run -C . cargo test --test nushell_tests --test nushell_cdp_tests --test integration_tests --all-features
+devenv-run -C . cargo test --test integration_tests --all-features
+```
+
+Run the mock-driven Nu coverage:
+
+```bash
+devenv-run -C . cargo build --bin nu_plugin_nusurf --bin nusurf_live_fixture_server --all-features
+devenv-run -C . nu --no-config-file -- tests/run_nushell_suite.nu all
 ```
 
 Run the live browser suites:

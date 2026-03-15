@@ -6,7 +6,7 @@ use session.nu [
 ]
 
 def ws-session-record [session_name: string] {
-    let session = (ws list | where id == $session_name | get -o 0)
+    let session = (ws list | where id == $session_name | first)
 
     if $session == null {
         error make {
@@ -558,7 +558,7 @@ export def "cdp page list" [
     | where type == "page"
     | each {|target|
         let ws_url = (page-ws-url $browser_context.session $target.targetId)
-        let session_name = ($sessions | where url == $ws_url | get -o 0.id)
+        let session_name = ($sessions | where url == $ws_url | get -o id | first)
 
         $target | merge {
             browserSession: $browser_context.session

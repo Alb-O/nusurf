@@ -165,7 +165,9 @@ impl PluginCommand for WebSocketOpen {
 				return Err(LabeledError::new("Raw buffer size must be zero or greater")
 					.with_label("Invalid raw buffer size", call.head));
 			}
-			Some(val) => val as usize,
+			Some(val) => usize::try_from(val).map_err(|_| {
+				LabeledError::new("Raw buffer size is too large").with_label("Invalid raw buffer size", call.head)
+			})?,
 			None => DEFAULT_MAX_RAW_MESSAGES,
 		};
 
@@ -179,7 +181,7 @@ impl PluginCommand for WebSocketOpen {
 
 		let mut sessions = sessions_mut()?;
 		if sessions.contains_key(&session_id) {
-			return Err(LabeledError::new(format!("Session '{}' already exists", session_id)));
+			return Err(LabeledError::new(format!("Session '{session_id}' already exists")));
 		}
 
 		let value = session_value(&session_id, &url_text, span);
@@ -292,7 +294,7 @@ impl PluginCommand for WebSocketSendJson {
 		let client = session_client(&session_id)?;
 		let json = pipeline_input_to_json(input, call.head)?;
 		let bytes = serde_json::to_vec(&json)
-			.map_err(|e| LabeledError::new(format!("Failed to serialize JSON payload: {}", e)))?;
+			.map_err(|e| LabeledError::new(format!("Failed to serialize JSON payload: {e}")))?;
 
 		client.send(bytes).map_err(LabeledError::new)?;
 		Ok(PipelineData::Value(Value::nothing(call.head), None))
@@ -470,7 +472,7 @@ impl PluginCommand for WebSocketClose {
 		let session_id: String = call.req(0)?;
 		let entry = sessions_mut()?
 			.remove(&session_id)
-			.ok_or_else(|| LabeledError::new(format!("Session '{}' was not found", session_id)))?;
+			.ok_or_else(|| LabeledError::new(format!("Session '{session_id}' was not found")))?;
 
 		entry.client.close().map_err(LabeledError::new)?;
 		Ok(PipelineData::Value(

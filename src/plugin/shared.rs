@@ -6,17 +6,13 @@ use {
 };
 
 pub(super) fn init_logging(verbose: Option<Value>) {
-	let level = if let Some(Value::Int { val, .. }) = verbose {
-		match val {
-			0 => Level::ERROR,
-			1 => Level::WARN,
-			2 => Level::INFO,
-			3 => Level::DEBUG,
-			4 => Level::TRACE,
-			_ => Level::INFO,
-		}
-	} else {
-		Level::ERROR
+	let level = match verbose {
+		Some(Value::Int { val: 0, .. }) => Level::ERROR,
+		Some(Value::Int { val: 1, .. }) => Level::WARN,
+		Some(Value::Int { val: 3, .. }) => Level::DEBUG,
+		Some(Value::Int { val: 4, .. }) => Level::TRACE,
+		Some(Value::Int { .. }) => Level::INFO,
+		_ => Level::ERROR,
 	};
 
 	let subscriber = tracing_subscriber::fmt()
@@ -38,9 +34,10 @@ pub(super) fn validate_ws_scheme(url: &WebSocketUrl, span: nu_protocol::Span) ->
 pub(super) fn parse_timeout(timeout: Option<Value>) -> Result<Option<Duration>, LabeledError> {
 	timeout
 		.map(|val| {
-			val.as_duration()
-				.map(|duration| Duration::from_nanos(duration as u64))
-				.map_err(LabeledError::from)
+			let duration = val.as_duration().map_err(LabeledError::from)?;
+			u64::try_from(duration)
+				.map(Duration::from_nanos)
+				.map_err(|_| LabeledError::new("Duration cannot be negative"))
 		})
 		.transpose()
 }

@@ -240,7 +240,7 @@ impl Read for WebSocketClient {
 					self.enqueue_message(message);
 					return Ok(self.drain_buffer(buf));
 				}
-				Err(RecvTimeoutError::Timeout) => continue,
+				Err(RecvTimeoutError::Timeout) => {}
 				Err(RecvTimeoutError::Disconnected) => return Ok(0),
 			}
 		}
@@ -516,10 +516,7 @@ fn spawn_worker_thread(
 					Ok(other) => {
 						tracing::trace!("Ignoring WebSocket message: {other:?}");
 					}
-					Err(WsError::Io(err)) if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
-						thread::yield_now();
-						continue;
-					}
+					Err(WsError::Io(err)) if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
 					Err(WsError::ConnectionClosed | WsError::AlreadyClosed) => {
 						tracing::debug!("WebSocket closed");
 						closed.store(true, Ordering::SeqCst);
@@ -582,10 +579,7 @@ fn spawn_session_worker_thread(
 					Ok(other) => {
 						tracing::trace!("Ignoring WebSocket message: {other:?}");
 					}
-					Err(WsError::Io(err)) if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
-						thread::yield_now();
-						continue;
-					}
+					Err(WsError::Io(err)) if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
 					Err(WsError::ConnectionClosed | WsError::AlreadyClosed) => {
 						tracing::debug!("WebSocket closed");
 						closed.store(true, Ordering::SeqCst);

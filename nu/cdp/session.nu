@@ -143,13 +143,7 @@ export def "cdp call" [
         }
     }
 
-    let response_result = ($response | get -o result)
-
-    if $response_result != null {
-        $response_result
-    } else {
-        null
-    }
+    $response | get -o result
 }
 
 # Read the next CDP event, optionally filtered by method or attached session.

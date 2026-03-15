@@ -13,7 +13,7 @@ export def resolve-path-candidate [
     if ($expanded | path exists) {
         $expanded
     } else {
-        let hit = (which $candidate | get -o 0.path)
+        let hit = (which $candidate | get -o path | first)
 
         if $hit == null {
             null

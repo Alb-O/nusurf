@@ -89,7 +89,7 @@ export def schema-lookup [
     let entry = (
         schema-kind-entries $kind $parsed.domain
         | where qualified == $qualified
-        | get -o 0
+        | first
     )
 
     if $entry == null {
@@ -102,13 +102,7 @@ export def schema-lookup [
 }
 
 def entry-member [entry: record] {
-    let name = ($entry | get -o name)
-
-    if $name == null {
-        $entry | get id
-    } else {
-        $name
-    }
+    $entry | get -o name id | compact | first
 }
 
 def enrich-search-entry [kind: string, entry: record] {

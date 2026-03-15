@@ -53,7 +53,7 @@ def wait-for-ws-url [target: any, max_time: duration, interval: duration] {
 }
 
 def open-or-reuse-browser-session [name: string, ws_url: string, raw_buffer: int = 0] {
-    let existing_session = (ws list | where id == $name | get -o 0)
+    let existing_session = (ws list | where id == $name | first)
 
     match $existing_session {
         null => (ws open $ws_url --name $name --raw-buffer $raw_buffer)
@@ -129,10 +129,10 @@ def browser-env-candidate [name: string] {
         (
             $raw_text
             | split row ":"
-            | get -o 0
+            | first
             | str trim
             | split words
-            | get -o 0
+            | first
         )
     ]
     | compact --empty
@@ -188,13 +188,13 @@ def discover-browser-path [] {
     )
 
     if $env_candidate != null {
-        $env_candidate
-    } else {
-        chromium-browser-candidates
-        | each {|candidate| resolve-path-candidate $candidate }
-        | compact
-        | first
+        return $env_candidate
     }
+
+    chromium-browser-candidates
+    | each {|candidate| resolve-path-candidate $candidate }
+    | compact
+    | first
 }
 
 # Resolve a CDP discovery target to its websocket URL.

@@ -3,6 +3,25 @@ use ../../nu/cdp.nu *
 const live_browser_suites_file = (path self ../live_browser_suites.nuon)
 const include_paths_separator = (char --integer 30)
 
+def read-trimmed-file [path: string] {
+    try {
+        open $path | str trim
+    } catch {
+        ""
+    }
+}
+
+def resolve-repo-path [
+    repo_root: string
+    candidate: string
+] {
+    try {
+        $candidate | path expand
+    } catch {
+        $"($repo_root)/($candidate)"
+    }
+}
+
 def print-output-section [
     label: string
     output?: string
@@ -111,13 +130,7 @@ def run-live-script [
     script_args: list<string>
     --verbose(-v)
 ] {
-    let child_script_path = (
-        try {
-            $script_path | path expand
-        } catch {
-            $"($repo_root)/($script_path)"
-        }
-    )
+    let child_script_path = (resolve-repo-path $repo_root $script_path)
     let include_paths = (
         [
             $"($repo_root)/nu"
@@ -125,12 +138,14 @@ def run-live-script [
         ]
         | str join $include_paths_separator
     )
+    let plugin_registry = (mktemp)
     let timed_result = (
         timeit --output {
-            ^nu --no-config-file -I $include_paths --plugins $plugin_path -- $child_script_path ...$script_args
+            ^nu --no-config-file --plugin-config $plugin_registry -I $include_paths --plugins $plugin_path -- $child_script_path ...$script_args
             | complete
         }
     )
+    let _ = (rm -f $plugin_registry)
     let duration = $timed_result.time
     let result = $timed_result.output
 
@@ -194,8 +209,10 @@ def wait-for-file-content [path: string, max_time: duration] {
     let deadline = (date now) + $max_time
 
     loop {
-        if (($path | path exists) and (((open $path | str trim) | is-not-empty))) {
-            return (open $path | str trim)
+        let content = (read-trimmed-file $path)
+
+        if ($content | is-not-empty) {
+            return $content
         }
 
         if ((date now) >= $deadline) {
@@ -248,8 +265,8 @@ export def "run-live-browser-suite" [
     --verbose(-v) # Print child script stdout and stderr even when scripts succeed.
 ] {
     let repo_root = ($env.PWD | path expand)
-    let plugin_path = ($plugin | path expand)
-    let fixture_binary_path = ($fixture_binary | path expand)
+    let plugin_path = (resolve-repo-path $repo_root $plugin)
+    let fixture_binary_path = (resolve-repo-path $repo_root $fixture_binary)
 
     if (not ($plugin_path | path exists)) {
         error make {
