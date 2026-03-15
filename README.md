@@ -102,3 +102,5 @@ Run the live browser suites through Nu so the Nu workflow layer owns orchestrati
 cargo build --bin nu_plugin_ws --bin nu_ws_live_fixture_server --all-features
 nu --no-config-file --plugins target/debug/nu_plugin_ws -- tests/run_live_browser_suite.nu browser-all
 ```
+
+Add `--verbose` to print child-script stdout and stderr even on successful runs.
