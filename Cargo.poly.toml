@@ -13,6 +13,10 @@ autobins = false
 name = "nu_plugin_ws"
 path = "src/main.rs"
 
+[[bin]]
+name = "nu_ws_live_fixture_server"
+path = "src/bin/live_fixture_server.rs"
+
 [dependencies]
 env_logger = true
 log = true

@@ -1,0 +1,70 @@
+{
+  "browser-no-fixture": [
+    {
+      path: "tests/cdp/browser/basic.nu"
+      needsFixture: false
+    }
+    {
+      path: "tests/cdp/browser/disconnects.nu"
+      needsFixture: false
+    }
+    {
+      path: "tests/cdp/browser/large_artifacts.nu"
+      needsFixture: false
+    }
+    {
+      path: "tests/cdp/browser/page_workflow.nu"
+      needsFixture: false
+    }
+  ]
+  "browser-with-fixture": [
+    {
+      path: "tests/cdp/browser/events.nu"
+      needsFixture: true
+    }
+    {
+      path: "tests/cdp/browser/concurrency.nu"
+      needsFixture: true
+    }
+    {
+      path: "tests/cdp/browser/attached.nu"
+      needsFixture: true
+    }
+  ]
+  "browser-all": [
+    {
+      path: "tests/cdp/browser/basic.nu"
+      needsFixture: false
+    }
+    {
+      path: "tests/cdp/browser/disconnects.nu"
+      needsFixture: false
+    }
+    {
+      path: "tests/cdp/browser/large_artifacts.nu"
+      needsFixture: false
+    }
+    {
+      path: "tests/cdp/browser/page_workflow.nu"
+      needsFixture: false
+    }
+    {
+      path: "tests/cdp/browser/events.nu"
+      needsFixture: true
+    }
+    {
+      path: "tests/cdp/browser/concurrency.nu"
+      needsFixture: true
+    }
+    {
+      path: "tests/cdp/browser/attached.nu"
+      needsFixture: true
+    }
+  ]
+  "page-workflow": [
+    {
+      path: "tests/cdp/browser/page_workflow.nu"
+      needsFixture: false
+    }
+  ]
+}

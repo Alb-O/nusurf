@@ -89,3 +89,16 @@ Refresh the committed CDP schema artifact with:
 ```bash
 devenv-run -C . update-cdp-schema
 ```
+
+Run the Rust test suite for the core engine, plugin behavior, and mock-driven Nu coverage with:
+
+```bash
+cargo test --test nushell_tests --test nushell_cdp_tests --test integration_tests --all-features
+```
+
+Run the live browser suites through Nu so the Nu workflow layer owns orchestration:
+
+```bash
+cargo build --bin nu_plugin_ws --bin nu_ws_live_fixture_server --all-features
+nu --no-config-file --plugins target/debug/nu_plugin_ws -- tests/run_live_browser_suite.nu browser-all
+```
