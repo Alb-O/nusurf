@@ -19,16 +19,20 @@ use {
 	},
 	tungstenite::{
 		ClientRequestBuilder, Error as WsError, Message, WebSocket,
+		client::connect_with_config,
 		error::ProtocolError,
+		protocol::WebSocketConfig,
 		stream::{MaybeTlsStream, NoDelay},
 	},
 	url::Url,
 };
 
 const SOCKET_POLL_INTERVAL: Duration = Duration::from_millis(100);
-const MAX_RAW_MESSAGES: usize = 1024;
+pub const DEFAULT_MAX_RAW_MESSAGES: usize = 1024;
 const MAX_ROUTED_RESPONSES: usize = 1024;
 const MAX_ROUTED_EVENTS: usize = 1024;
+const MAX_WEBSOCKET_MESSAGE_SIZE: usize = 256 << 20;
+const MAX_WEBSOCKET_FRAME_SIZE: usize = 128 << 20;
 
 type WebSocketStream = WebSocket<MaybeTlsStream<TcpStream>>;
 type SharedSessionState = Arc<(Mutex<SessionQueues>, Condvar)>;
@@ -76,6 +80,7 @@ pub struct WebSocketClient {
 
 struct SessionQueues {
 	raw_messages: VecDeque<ReceivedMessage>,
+	max_raw_messages: usize,
 	responses_by_id: HashMap<String, VecDeque<RoutedJson>>,
 	responses_all: VecDeque<(String, RoutedJson)>,
 	events_all: VecDeque<RoutedJson>,
@@ -191,6 +196,7 @@ impl SessionClient {
 	pub fn recv_raw(
 		&self, timeout: Option<Duration>, signals: &Signals, span: Span,
 	) -> Result<Option<ReceivedMessage>, String> {
+		self.ensure_raw_messages_enabled()?;
 		self.wait_for(timeout, signals, span, |queues| queues.raw_messages.pop_front())
 	}
 
@@ -229,6 +235,19 @@ impl SessionClient {
 	/// Whether the session worker has already observed the socket as closed.
 	pub fn is_closed(&self) -> bool {
 		self.handle.closed.load(Ordering::SeqCst)
+	}
+
+	fn ensure_raw_messages_enabled(&self) -> Result<(), String> {
+		let (lock, _) = &*self.state;
+		let queues = lock
+			.lock()
+			.map_err(|_| "Failed to lock WebSocket session state".to_string())?;
+
+		if queues.max_raw_messages == 0 {
+			return Err("Raw message buffering is disabled for this session".to_string());
+		}
+
+		Ok(())
 	}
 
 	fn wait_for<T, F>(
@@ -285,9 +304,9 @@ pub fn connect(
 }
 
 /// Open a persistent WebSocket session with routed JSON response and event queues.
-pub fn connect_session(url: Url, headers: HashMap<String, String>) -> Option<SessionClient> {
+pub fn connect_session(url: Url, headers: HashMap<String, String>, max_raw_messages: usize) -> Option<SessionClient> {
 	let websocket = open_websocket(url, headers)?;
-	let (tx, state, closed) = connect_session_components(websocket)?;
+	let (tx, state, closed) = connect_session_components(websocket, max_raw_messages)?;
 	Some(SessionClient {
 		handle: SessionHandle { tx, closed },
 		state,
@@ -310,7 +329,7 @@ fn open_websocket(url: Url, headers: HashMap<String, String>) -> Option<WebSocke
 
 	log::debug!("Attempting WebSocket connection...");
 
-	match tungstenite::connect(builder) {
+	match connect_with_config(builder, Some(websocket_config()), 3) {
 		Ok((mut websocket, _)) => {
 			log::debug!("WebSocket handshake completed successfully");
 			configure_socket(&mut websocket).ok()?;
@@ -346,13 +365,14 @@ fn connect_components(
 }
 
 fn connect_session_components(
-	websocket: WebSocketStream,
+	websocket: WebSocketStream, max_raw_messages: usize,
 ) -> Option<(mpsc::SyncSender<ControlMessage>, SharedSessionState, Arc<AtomicBool>)> {
 	let (tx_control, rx_control) = mpsc::sync_channel(1024);
 	let closed = Arc::new(AtomicBool::new(false));
 	let state = Arc::new((
 		Mutex::new(SessionQueues {
 			raw_messages: VecDeque::new(),
+			max_raw_messages,
 			responses_by_id: HashMap::new(),
 			responses_all: VecDeque::new(),
 			events_all: VecDeque::new(),
@@ -546,12 +566,20 @@ fn enqueue_session_message(state: &SharedSessionState, message: ReceivedMessage)
 			}
 		}
 
-		queues.raw_messages.push_back(message);
-		while queues.raw_messages.len() > MAX_RAW_MESSAGES {
-			let _ = queues.raw_messages.pop_front();
+		if queues.max_raw_messages > 0 {
+			queues.raw_messages.push_back(message);
+			while queues.raw_messages.len() > queues.max_raw_messages {
+				let _ = queues.raw_messages.pop_front();
+			}
 		}
 		condvar.notify_all();
 	}
+}
+
+fn websocket_config() -> WebSocketConfig {
+	WebSocketConfig::default()
+		.max_message_size(Some(MAX_WEBSOCKET_MESSAGE_SIZE))
+		.max_frame_size(Some(MAX_WEBSOCKET_FRAME_SIZE))
 }
 
 fn push_response(queues: &mut SessionQueues, id: String, response: RoutedJson) {

@@ -94,9 +94,10 @@ def resolve-session-id [session: any] {
 export def "cdp open" [
     target: any # Browser port, discovery URL, websocket URL, or version record.
     --name(-n): string # Session name to register locally.
+    --raw-buffer(-r): int = 0 # Number of raw websocket messages to retain for `ws recv`.
 ] {
     let session = ($name | default $"cdp-((random int 1000000000..9999999999))")
-    ws open (resolve-ws-url $target) --name $session
+    ws open (resolve-ws-url $target) --name $session --raw-buffer $raw_buffer
 }
 
 # Send a validated CDP command and await its response.

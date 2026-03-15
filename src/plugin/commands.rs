@@ -8,7 +8,7 @@ use {
 		},
 		shared::{init_logging, parse_timeout, raw_message_value, validate_ws_scheme},
 	},
-	crate::ws::client::{connect, connect_session, http_parse_url, request_headers},
+	crate::ws::client::{DEFAULT_MAX_RAW_MESSAGES, connect, connect_session, http_parse_url, request_headers},
 	nu_plugin::{EngineInterface, EvaluatedCall, PluginCommand},
 	nu_protocol::{
 		ByteStream, ByteStreamType, Category, LabeledError, PipelineData, Signature, SyntaxShape, Type, Value,
@@ -132,6 +132,12 @@ impl PluginCommand for WebSocketOpen {
 			.named("headers", SyntaxShape::Any, "custom headers you want to add", Some('H'))
 			.named("name", SyntaxShape::String, "session name to use", Some('n'))
 			.named(
+				"raw-buffer",
+				SyntaxShape::Int,
+				"number of raw messages to retain for `ws recv` or `ws recv-json`",
+				Some('r'),
+			)
+			.named(
 				"verbose",
 				SyntaxShape::Int,
 				"verbosity level (0=error, 1=warn, 2=info, 3=debug, 4=trace)",
@@ -146,6 +152,7 @@ impl PluginCommand for WebSocketOpen {
 		let url: Value = call.req(0)?;
 		let headers: Option<Value> = call.get_flag("headers")?;
 		let name: Option<String> = call.get_flag("name")?;
+		let raw_buffer: Option<i64> = call.get_flag("raw-buffer")?;
 		let verbose: Option<Value> = call.get_flag("verbose")?;
 
 		init_logging(verbose);
@@ -153,10 +160,22 @@ impl PluginCommand for WebSocketOpen {
 		let span = url.span();
 		let (url_text, requested_url) = http_parse_url(call, span, url).map_err(LabeledError::from)?;
 		validate_ws_scheme(&requested_url, span)?;
+		let max_raw_messages = match raw_buffer {
+			Some(val) if val < 0 => {
+				return Err(LabeledError::new("Raw buffer size must be zero or greater")
+					.with_label("Invalid raw buffer size", call.head));
+			}
+			Some(val) => val as usize,
+			None => DEFAULT_MAX_RAW_MESSAGES,
+		};
 
 		let session_id = name.unwrap_or_else(next_session_id);
-		let client = connect_session(requested_url, request_headers(headers).map_err(LabeledError::from)?)
-			.ok_or_else(|| LabeledError::new("Failed to connect to WebSocket"))?;
+		let client = connect_session(
+			requested_url,
+			request_headers(headers).map_err(LabeledError::from)?,
+			max_raw_messages,
+		)
+		.ok_or_else(|| LabeledError::new("Failed to connect to WebSocket"))?;
 
 		let mut sessions = sessions_mut()?;
 		if sessions.contains_key(&session_id) {

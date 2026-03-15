@@ -52,11 +52,11 @@ def wait-for-ws-url [target: any, max_time: duration, interval: duration] {
     }
 }
 
-def open-or-reuse-browser-session [name: string, ws_url: string] {
+def open-or-reuse-browser-session [name: string, ws_url: string, raw_buffer: int = 0] {
     let existing_session = (ws list | where id == $name | get -o 0)
 
     match $existing_session {
-        null => (ws open $ws_url --name $name)
+        null => (ws open $ws_url --name $name --raw-buffer $raw_buffer)
         {url: $url} if $url == $ws_url => $existing_session
         _ => {
             error make {
@@ -240,10 +240,11 @@ export def "cdp browser wait" [
 export def "cdp browser open" [
     target: any = 9222 # Browser port, discovery URL, websocket URL, or version record.
     --name(-n): string = "browser" # Session name to register locally.
+    --raw-buffer(-r): int = 0 # Number of raw websocket messages to retain for `ws recv`.
     --max-time(-m): duration = 10sec # Maximum time to wait for the browser target.
     --interval(-i): duration = 100ms # Delay between discovery attempts.
 ] {
-    open-or-reuse-browser-session $name (wait-for-ws-url $target $max_time $interval)
+    open-or-reuse-browser-session $name (wait-for-ws-url $target $max_time $interval) $raw_buffer
 }
 
 # Launch or attach to a browser and return a record agents can keep using.
@@ -251,6 +252,7 @@ export def "cdp browser start" [
     --browser(-b): string # Explicit browser path or command name to launch.
     --port(-p): int = 9222 # Remote debugging port to attach on.
     --name(-n): string = "browser" # Session name to register locally.
+    --raw-buffer(-r): int = 0 # Number of raw websocket messages to retain for `ws recv`.
     --headless(-h) = true # Launch Chromium headless by default.
     --user-data-dir(-u): string # Browser profile directory; a temp dir is used by default.
     --url: string = "about:blank" # Initial URL to open after launch.
@@ -263,7 +265,7 @@ export def "cdp browser start" [
     )
 
     if $existing_ws_url != null {
-        let session = (open-or-reuse-browser-session $name $existing_ws_url)
+        let session = (open-or-reuse-browser-session $name $existing_ws_url $raw_buffer)
 
         return {
             launched: false
@@ -289,7 +291,7 @@ export def "cdp browser start" [
         }
     )
     let ws_url = (wait-for-ws-url $port $max_time $interval)
-    let session = (open-or-reuse-browser-session $name $ws_url)
+    let session = (open-or-reuse-browser-session $name $ws_url $raw_buffer)
 
     {
         launched: true

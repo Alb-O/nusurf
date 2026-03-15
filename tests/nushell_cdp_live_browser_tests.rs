@@ -323,3 +323,10 @@ fn live_browser_nu_cdp_disconnects() {
 		panic!("{err}");
 	}
 }
+
+#[test]
+fn live_browser_nu_cdp_large_artifacts() {
+	if let Err(err) = run_live_browser_script("cdp/browser/large_artifacts.nu", &[]) {
+		panic!("{err}");
+	}
+}
