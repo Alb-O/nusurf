@@ -1,9 +1,11 @@
 use std::path::{Path, PathBuf};
 
 pub fn discover_chromium_browser() -> Option<PathBuf> {
-	std::env::var_os("NU_CDP_BROWSER")
-		.map(PathBuf::from)
-		.filter(|path| path.exists())
+	[std::env::var_os("NU_CDP_BROWSER"), std::env::var_os("BROWSER")]
+		.into_iter()
+		.flatten()
+		.flat_map(env_browser_candidates)
+		.find_map(resolve_path_candidate)
 		.or_else(find_browser_on_host)
 }
 
@@ -13,11 +15,18 @@ fn find_browser_on_host() -> Option<PathBuf> {
 		for name in [
 			"google-chrome",
 			"google-chrome-stable",
-			"chromium-browser",
 			"chromium",
+			"chromium-browser",
+			"chrome",
+			"brave-browser",
+			"microsoft-edge",
+			"microsoft-edge-stable",
+			"vivaldi",
+			"vivaldi-stable",
+			"opera",
 			"helium",
 		] {
-			if let Some(path) = find_in_path(name) {
+			if let Some(path) = resolve_path_candidate(name) {
 				return Some(path);
 			}
 		}
@@ -51,6 +60,35 @@ fn find_browser_on_host() -> Option<PathBuf> {
 	}
 
 	None
+}
+
+fn env_browser_candidates(raw: std::ffi::OsString) -> Vec<String> {
+	let raw = raw.to_string_lossy();
+	let trimmed = raw.trim();
+	if trimmed.is_empty() {
+		return vec![];
+	}
+
+	let first_segment = trimmed.split(':').next().unwrap_or(trimmed).trim();
+	let first_word = first_segment.split_whitespace().next().unwrap_or(first_segment);
+
+	[trimmed, first_word]
+		.into_iter()
+		.filter(|candidate| !candidate.is_empty())
+		.map(str::to_string)
+		.collect()
+}
+
+fn resolve_path_candidate(candidate: impl AsRef<Path>) -> Option<PathBuf> {
+	let candidate = candidate.as_ref();
+
+	if candidate.exists() {
+		return Some(candidate.to_path_buf());
+	}
+
+	candidate
+		.file_name()
+		.and_then(|name| find_in_path(name.to_string_lossy().as_ref()))
 }
 
 fn find_in_path(binary: &str) -> Option<PathBuf> {

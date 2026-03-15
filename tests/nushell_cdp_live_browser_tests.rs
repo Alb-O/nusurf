@@ -254,8 +254,9 @@ fn fixture_response(path: &str) -> (&'static str, &'static str, String) {
 
 fn run_live_browser_script(script_name: &str, extra_args: &[String]) -> Result<(), String> {
 	let Some(browser) = browser::discover_chromium_browser() else {
-		eprintln!("skipping live browser e2e: set NU_CDP_BROWSER or install a Chromium-compatible browser on PATH");
-		return Ok(());
+		return Err("No Chromium-compatible browser found for live browser tests. \
+set NU_CDP_BROWSER or install a supported browser on PATH."
+			.to_string());
 	};
 
 	let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -327,6 +328,13 @@ fn live_browser_nu_cdp_disconnects() {
 #[test]
 fn live_browser_nu_cdp_large_artifacts() {
 	if let Err(err) = run_live_browser_script("cdp/browser/large_artifacts.nu", &[]) {
+		panic!("{err}");
+	}
+}
+
+#[test]
+fn live_browser_nu_cdp_page_workflow() {
+	if let Err(err) = run_live_browser_script("cdp/browser/page_workflow.nu", &[]) {
 		panic!("{err}");
 	}
 }
