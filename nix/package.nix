@@ -2,23 +2,51 @@
   lib,
   pkgs,
   rustPlatform ? pkgs.rustPlatform,
+  managedCargoDir ? null,
+  cargoCatalogPath ? null,
 }:
 
 let
-  cargoManifest = builtins.readFile ../Cargo.toml;
-  packageSrc = lib.fileset.toSource {
+  defaultManagedCargoDir = "${toString ../..}/poly-rust-env/modules/managed-cargo";
+  resolvedManagedCargoDir =
+    if managedCargoDir != null then
+      managedCargoDir
+    else if builtins.pathExists defaultManagedCargoDir then
+      defaultManagedCargoDir
+    else
+      throw ''
+        nusurf packaging requires poly-rust-env/modules/managed-cargo.
+        Pass `managedCargoDir` to `nix/package.nix`, or build from the polyrepo checkout.
+      '';
+  resolvedCargoCatalogPath =
+    if cargoCatalogPath != null then
+      cargoCatalogPath
+    else
+      "${resolvedManagedCargoDir}/Cargo.catalog.toml";
+  packageFiles = lib.fileset.toSource {
     root = ../.;
     fileset = lib.fileset.unions [
       ../Cargo.lock
+      ../Cargo.poly.toml
+      ../README.md
       ../src
     ];
+  };
+  managedCargoLib = import "${resolvedManagedCargoDir}/lib.nix" {
+    inherit pkgs lib;
+  };
+  managedCargoOutputs = managedCargoLib.mkManagedCargoOutputs {
+    catalogPath = resolvedCargoCatalogPath;
+    specPath = ../Cargo.poly.toml;
+    sourcePath = packageFiles;
+    derivationNamePrefix = "nusurf";
   };
 in
 rustPlatform.buildRustPackage {
   pname = "nu_plugin_nusurf";
   version = "1.0.6";
 
-  src = packageSrc;
+  src = managedCargoOutputs.cargoSourceTree;
   cargoLock.lockFile = ../Cargo.lock;
 
   nativeBuildInputs = [ pkgs.pkg-config ];
@@ -40,10 +68,6 @@ rustPlatform.buildRustPackage {
     "-Zlocation-detail=none"
   ];
 
-  postPatch = ''
-    printf '%s' ${lib.escapeShellArg cargoManifest} > Cargo.toml
-  '';
-
   postInstall = ''
     mkdir -p $out/share/nushell/nusurf
     cp -r ${../nu} $out/share/nushell/nusurf/nu
@@ -51,7 +75,7 @@ rustPlatform.buildRustPackage {
   '';
 
   passthru = {
-    nushellModulePath = "$out/share/nushell/nusurf/nu/cdp.nu";
+    nushellModuleSubpath = "share/nushell/nusurf/nu/cdp.nu";
   };
 
   meta = {

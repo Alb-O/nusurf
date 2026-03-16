@@ -115,15 +115,39 @@ ws close cdp
 
 A nix package and Home Manager module are included:
 
-Example Home Manager usage:
+Inside this polyrepo, the package defaults to the shared managed-Cargo catalog
+and merge script from `poly-rust-env`.
+
+Example Home Manager usage inside the polyrepo:
 
 ```nix
 {
   imports = [
-    "${builtins.fetchTarball "https://github.com/Alb-O/nusurf/archive/main.tar.gz"}/nix/home-manager.nix"
+    ./repos/nusurf/nix/home-manager.nix
   ];
 
   programs.nusurf.enable = true;
+}
+```
+
+Outside the polyrepo, construct the package explicitly and pass the managed
+Cargo inputs, then hand that package to the Home Manager module:
+
+```nix
+let
+  nusurfSrc = builtins.fetchTarball "https://github.com/Alb-O/nusurf/archive/main.tar.gz";
+  polyRustEnvSrc = builtins.fetchTarball "https://github.com/Alb-O/poly-rust-env/archive/main.tar.gz";
+  nusurf = pkgs.callPackage "${nusurfSrc}/nix/package.nix" {
+    managedCargoDir = "${polyRustEnvSrc}/modules/managed-cargo";
+  };
+in
+{
+  imports = [ "${nusurfSrc}/nix/home-manager.nix" ];
+
+  programs.nusurf = {
+    enable = true;
+    package = nusurf;
+  };
 }
 ```
 
