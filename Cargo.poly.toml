@@ -1,6 +1,6 @@
 [package]
 authors = ["Alex Johnson <alex.kattathra.johnson@gmail.com>", "Albert O'Shea"]
-repository = "https://github.com/alex-kattathra-johnson/nusurf"
+repository = "https://github.com/Alb-O/nusurf"
 readme = "README.md"
 license = "MIT"
 name = "nusurf"

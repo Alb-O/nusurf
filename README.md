@@ -1,6 +1,6 @@
 # nusurf
 
-A [Nushell](https://nushell.sh) plugin for WebSocket I/O, plus a Nu-first Chrome DevTools Protocol layer for browser automation and inspection.
+A [Nushell](https://nushell.sh) plugin for WebSocket I/O, plus a Nu-first Chrome DevTools Protocol layer for browser automation and inspection. The plugin binary exposes the `ws` commands. The `cdp` commands come from the bundled Nushell module.
 
 ## Quickstart
 
@@ -109,6 +109,22 @@ ws recv cdp --max-time 2sec
 ws recv cdp --max-time 2sec --full
 ws list
 ws close cdp
+```
+
+## Nix / Home Manager
+
+A nix package and Home Manager module are included:
+
+Example Home Manager usage:
+
+```nix
+{
+  imports = [
+    "${builtins.fetchTarball "https://github.com/Alb-O/nusurf/archive/main.tar.gz"}/nix/home-manager.nix"
+  ];
+
+  programs.nusurf.enable = true;
+}
 ```
 
 ## Dev
