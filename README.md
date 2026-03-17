@@ -13,14 +13,12 @@ let browser = (cdp browser start --use)
 # open page and make it current
 let page = (cdp page new --use)
 
-# navigate, then wait for selector
+# navigate, wait for selector
 cdp page goto "https://example.com/login" --wait-for "form"
 
-# inspect DOM
+# inspect DOM, fill, click
 cdp page query "input[name=email]"
 cdp page query ".result" --all
-
-# fill and click
 cdp page fill "input[name=email]" "agent@example.com"
 cdp page click "button[type=submit]"
 
@@ -55,6 +53,14 @@ Page commands default to the current page from `cdp use`, and browser-aware comm
 
 Nusurf does not ship a session registry. The current browser/page selection already lives in `$env.CDP_BROWSER` and `$env.CDP_PAGE`, both as plain Nu records, so saved state is just ordinary Nu data.
 
+To avoid ownership ambiguity, nusurf reserves these top-level keys in a saved context record:
+
+- `nusurf`: nusurf-owned data under `nusurf.browser`, `nusurf.page`, and `nusurf.metadata`
+- `user`: caller-owned metadata like `project` or `profile`
+- `ext`: extension/module-owned data under `ext.<namespace>`
+
+`project` and `profile` are not nusurf fields. They belong under `user` unless a module owns them under `ext.<namespace>`.
+
 If you installed nusurf with the Home Manager module, `cdp.nu` is imported automatically. Otherwise import it explicitly:
 
 ```nu
@@ -70,15 +76,16 @@ let browser = (cdp browser start --use)
 # create or select a page and make it current
 let page = (cdp page new --url "https://example.com" --use)
 
-# store whatever shape you want
-let contexts = {
-  work: {
-    browser: $env.CDP_BROWSER
-    page: $env.CDP_PAGE
-    project: "demo"
-    profile: "team-a"
-  }
-}
+# capture the current browser/page pair in the reserved shape
+let work = (
+  cdp context capture
+  | upsert user {
+      project: "demo"
+      profile: "team-a"
+    }
+)
+
+let contexts = {work: $work}
 
 # persist it with plain NUON
 $contexts | to nuon | save -f .nusurf-contexts.nuon
@@ -88,7 +95,7 @@ cdp use --clear
 
 # load and restore it later
 let contexts = (open .nusurf-contexts.nuon | from nuon)
-cdp use --browser $contexts.work.browser --page $contexts.work.page
+cdp use --browser $contexts.work.nusurf.browser --page $contexts.work.nusurf.page
 ```
 
 `cdp browser open`, `cdp browser start`, and `cdp page new` all support `--use` for the common "create or attach, then immediately make current" workflow.
@@ -98,16 +105,27 @@ One possible saved shape:
 ```nu
 {
   work: {
-    browser: {session: "...", url: "..."}
-    page: {
-      browserSession: "..."
-      session: "..."
-      targetId: "..."
-      webSocketDebuggerUrl: "..."
+    nusurf: {
+      browser: {session: "...", url: "..."}
+      page: {
+        browserSession: "..."
+        session: "..."
+        targetId: "..."
+        webSocketDebuggerUrl: "..."
+      }
+      metadata: {
+        saved_at: 2026-03-17T12:00:00+00:00
+      }
     }
-    project: "demo"
-    profile: "team-a"
-    updated_at: 2026-03-17T12:00:00+00:00
+    user: {
+      project: "demo"
+      profile: "team-a"
+    }
+    ext: {
+      my_module: {
+        cache_key: "demo"
+      }
+    }
   }
 }
 ```
@@ -120,18 +138,25 @@ let contexts = (open .nusurf-contexts.nuon | from nuon)
 let contexts = (
   $contexts
   | upsert work {
-      browser: $env.CDP_BROWSER
-      page: $env.CDP_PAGE
-      project: "demo"
-      profile: "team-b"
-      updated_at: 2026-03-17T12:00:00+00:00
+      nusurf: {
+        browser: $env.CDP_BROWSER
+        page: $env.CDP_PAGE
+        metadata: {
+          saved_at: 2026-03-17T12:00:00+00:00
+        }
+      }
+      user: {
+        project: "demo"
+        profile: "team-b"
+      }
+      ext: ($contexts.work | get -o ext | default {})
     }
 )
 
 $contexts | to nuon | save -f .nusurf-contexts.nuon
 ```
 
-You can inspect, transform, merge, and serialize this however you like with ordinary Nu pipelines.
+`cdp context normalize` validates that a record stays inside this reserved shape. Storage, transforms, and serialization are still just ordinary Nu pipelines.
 
 ## Discoverability
 

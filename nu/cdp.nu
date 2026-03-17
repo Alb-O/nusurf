@@ -29,6 +29,11 @@ export use cdp/page.nu [
     "cdp page eval"
 ]
 
+export use cdp/context.nu [
+    "cdp context capture"
+    "cdp context normalize"
+]
+
 export use cdp/session.nu [
     "cdp open"
     "cdp call"

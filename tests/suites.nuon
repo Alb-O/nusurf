@@ -12,6 +12,10 @@
       # schema introspection is pure, doesn't need fixture connection args
       args_mode: none
     }
+    cdp_context: {
+      path: tests/cdp/context.nu
+      args_mode: none
+    }
     browser_basic: {
       path: tests/cdp/browser/basic.nu
     }
@@ -70,6 +74,7 @@
       scripts: [
         cdp_mock
         cdp_schema
+        cdp_context
       ]
     }
     mock_all: {
