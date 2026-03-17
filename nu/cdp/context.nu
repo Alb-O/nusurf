@@ -1,5 +1,5 @@
 const reserved_context_keys = [nusurf user ext]
-const reserved_nusurf_keys = [browser page metadata]
+const reserved_nusurf_keys = [browser page]
 
 def expect-record [value: any, label: string]: nothing -> record {
     let details = ($value | describe --detailed)
@@ -45,7 +45,7 @@ def expect-known-nusurf-keys [nusurf_record: record]: nothing -> record {
             msg: (
                 "Unsupported nusurf context keys: "
                 + ($unknown_keys | str join ", ")
-                + ". Use `nusurf.browser`, `nusurf.page`, and `nusurf.metadata`."
+                + ". Use `nusurf.browser` and `nusurf.page`."
             )
         }
     }
@@ -73,7 +73,6 @@ def normalize-nusurf-record [value: any]: nothing -> record {
     {
         browser: ($nusurf_record | get -o browser)
         page: ($nusurf_record | get -o page)
-        metadata: (normalize-owned-record ($nusurf_record | get -o metadata) "nusurf context metadata")
     }
 }
 
@@ -95,7 +94,7 @@ def normalize-context-record [context?: any]: nothing -> record {
 
 # Capture the current CDP browser/page selection into the reserved context shape.
 #
-# `nusurf.browser`, `nusurf.page`, and `nusurf.metadata` are nusurf-owned.
+# `nusurf.browser` and `nusurf.page` are nusurf-owned.
 # `user` is for caller-owned metadata.
 # `ext.<namespace>` is for module/plugin-owned metadata.
 export def "cdp context capture" []: nothing -> record {
@@ -103,9 +102,6 @@ export def "cdp context capture" []: nothing -> record {
         nusurf: {
             browser: ($env | get -o CDP_BROWSER)
             page: ($env | get -o CDP_PAGE)
-            metadata: {
-                saved_at: (date now)
-            }
         }
     }
 }

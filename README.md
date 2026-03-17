@@ -51,7 +51,7 @@ Page commands default to the page selected by `cdp use`. Browser-aware commands 
 
 To avoid ownership ambiguity, nusurf reserves these top-level keys in a saved context record:
 
-- `nusurf`: nusurf-owned data under `nusurf.browser`, `nusurf.page`, and `nusurf.metadata`
+- `nusurf`: nusurf-owned data under `nusurf.browser` and `nusurf.page`
 - `user`: caller-owned metadata like `project` or `profile`
 - `ext`: extension/module-owned data under `ext.<namespace>`
 
@@ -66,10 +66,7 @@ use path/to/nu/cdp.nu *
 Example:
 
 ```nu
-# browser
 let browser = (cdp browser start --use)
-
-# page
 let page = (cdp page new --url "https://example.com" --use)
 
 # context record
@@ -83,7 +80,7 @@ let work = (
 
 let contexts = {work: $work}
 
-# write NUON
+# save to NUON file
 $contexts | to nuon | save -f .nusurf-contexts.nuon
 
 # clear shell binding
@@ -94,9 +91,7 @@ let contexts = (open .nusurf-contexts.nuon | from nuon)
 cdp use --browser $contexts.work.nusurf.browser --page $contexts.work.nusurf.page
 ```
 
-`cdp browser open`, `cdp browser start`, and `cdp page new` support `--use`.
-
-One possible saved shape:
+Example saved NUON:
 
 ```nu
 {
@@ -108,9 +103,6 @@ One possible saved shape:
         session: "..."
         targetId: "..."
         webSocketDebuggerUrl: "..."
-      }
-      metadata: {
-        saved_at: 2026-03-17T12:00:00+00:00
       }
     }
     user: {
@@ -126,7 +118,11 @@ One possible saved shape:
 }
 ```
 
-Updates are normal record transforms:
+Saved context files are user-managed Nu data. Nusurf does not rewrite them.
+
+Edit `user` and `ext` freely. Leave `nusurf.browser` and `nusurf.page` to nusurf. `cdp context normalize` checks shape and ownership. It does not check whether browser/page records still point to live CDP sessions.
+
+Example update:
 
 ```nu
 let contexts = (open .nusurf-contexts.nuon | from nuon)
@@ -137,9 +133,6 @@ let contexts = (
       nusurf: {
         browser: $env.CDP_BROWSER
         page: $env.CDP_PAGE
-        metadata: {
-          saved_at: 2026-03-17T12:00:00+00:00
-        }
       }
       user: {
         project: "demo"

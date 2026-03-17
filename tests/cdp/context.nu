@@ -17,7 +17,6 @@ def main [] {
     assert equal ($captured | columns) [nusurf user ext]
     assert equal $captured.nusurf.browser.session "browser-a"
     assert equal $captured.nusurf.page.session "page-a"
-    assert (($captured.nusurf.metadata | get saved_at) != null)
     assert equal $captured.user {}
     assert equal $captured.ext {}
 
@@ -43,7 +42,6 @@ def main [] {
     assert equal $normalized.ext.my_module.foo "bar"
     assert equal $normalized.nusurf.browser.session "browser-a"
     assert equal $normalized.nusurf.page.session "page-a"
-    assert equal $normalized.nusurf.metadata {}
 
     let unknown_key_error = (
         try {
@@ -61,7 +59,9 @@ def main [] {
         try {
             cdp context normalize {
                 nusurf: {
-                    project: "demo"
+                    metadata: {
+                        saved_at: 2026-03-17T12:00:00+00:00
+                    }
                 }
             } | ignore
             ""
