@@ -4,25 +4,21 @@ A [Nushell](https://nushell.sh) plugin for WebSocket I/O, plus a Nu-first Chrome
 
 ## Quickstart
 
-Start or attach to a browser, select the current context once, then drive a page with selector-based commands.
+Browser and page commands use the selected `cdp use` context.
 
 ```bash
-# launch or reuse browser and make it current
+# launch browser, set new page and navigate
 let browser = (cdp browser start --use)
-
-# open page and make it current
 let page = (cdp page new --use)
-
-# navigate, wait for selector
 cdp page goto "https://example.com/login" --wait-for "form"
 
-# inspect DOM, fill, click
+# DOM interaction
 cdp page query "input[name=email]"
 cdp page query ".result" --all
 cdp page fill "input[name=email]" "agent@example.com"
 cdp page click "button[type=submit]"
 
-# wait for async update
+# wait for page state
 cdp page wait ".flash" --state visible --text "Signed in"
 
 # cleanup
@@ -30,7 +26,7 @@ cdp page close
 cdp browser stop $browser
 ```
 
-Page commands default to the current page from `cdp use`, and browser-aware commands default to the current browser. Pass `--page` or `--browser` for explicit routing.
+Page commands default to the page selected by `cdp use`. Browser-aware commands default to the selected browser. Pass `--page` or `--browser` for explicit routing.
 
 `cdp page wait` and `cdp page query` return normalized element records:
 
@@ -51,7 +47,7 @@ Page commands default to the current page from `cdp use`, and browser-aware comm
 
 ## Saving CDP Context
 
-Nusurf does not ship a session registry. The current browser/page selection already lives in `$env.CDP_BROWSER` and `$env.CDP_PAGE`, both as plain Nu records, so saved state is just ordinary Nu data.
+`$env.CDP_BROWSER` and `$env.CDP_PAGE` are plain Nu records. Saved state is ordinary Nu data.
 
 To avoid ownership ambiguity, nusurf reserves these top-level keys in a saved context record:
 
@@ -61,22 +57,22 @@ To avoid ownership ambiguity, nusurf reserves these top-level keys in a saved co
 
 `project` and `profile` are not nusurf fields. They belong under `user` unless a module owns them under `ext.<namespace>`.
 
-If you installed nusurf with the Home Manager module, `cdp.nu` is imported automatically. Otherwise import it explicitly:
+The Home Manager module imports `cdp.nu`. Otherwise:
 
 ```nu
 use path/to/nu/cdp.nu *
 ```
 
-Typical workflow:
+Example:
 
 ```nu
-# start or attach to a browser and make it current
+# browser
 let browser = (cdp browser start --use)
 
-# create or select a page and make it current
+# page
 let page = (cdp page new --url "https://example.com" --use)
 
-# capture the current browser/page pair in the reserved shape
+# context record
 let work = (
   cdp context capture
   | upsert user {
@@ -87,18 +83,18 @@ let work = (
 
 let contexts = {work: $work}
 
-# persist it with plain NUON
+# write NUON
 $contexts | to nuon | save -f .nusurf-contexts.nuon
 
-# clear the active browser/page binding in this shell
+# clear shell binding
 cdp use --clear
 
-# load and restore it later
+# read NUON and apply binding
 let contexts = (open .nusurf-contexts.nuon | from nuon)
 cdp use --browser $contexts.work.nusurf.browser --page $contexts.work.nusurf.page
 ```
 
-`cdp browser open`, `cdp browser start`, and `cdp page new` all support `--use` for the common "create or attach, then immediately make current" workflow.
+`cdp browser open`, `cdp browser start`, and `cdp page new` support `--use`.
 
 One possible saved shape:
 
@@ -156,7 +152,7 @@ let contexts = (
 $contexts | to nuon | save -f .nusurf-contexts.nuon
 ```
 
-`cdp context normalize` validates that a record stays inside this reserved shape. Storage, transforms, and serialization are still just ordinary Nu pipelines.
+`cdp context normalize` validates this reserved shape. Storage, transforms, and serialization stay in ordinary Nu pipelines.
 
 ## Discoverability
 
@@ -176,13 +172,13 @@ cdp schema search events load
 
 ## Debugging defaults
 
-The convenience entry points keep raw websocket traffic by default, so `ws recv` works immediately:
+The convenience entry points keep raw websocket traffic by default, so `ws recv` works without extra setup:
 
 - `cdp browser open`
 - `cdp browser start`
 - `cdp page new`
 
-The raw buffer defaults to `128` for low-level inspection, while still using the higher-level Nu commands:
+The raw buffer default is `128`:
 
 ```bash
 let browser = (cdp browser start)
@@ -192,7 +188,7 @@ ws recv $browser.session --full
 
 ## Lower-level usage
 
-The higher-level CDP commands cover the normal browser workflow. The raw websocket layer is also accessible.
+The higher-level CDP commands cover browser automation and inspection. The raw websocket layer is also available.
 
 ### One-shot websocket streaming
 
