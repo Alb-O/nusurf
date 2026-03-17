@@ -1,6 +1,7 @@
 use common.nu *
 
-def json-version-url [target: any]: nothing -> oneof<string, error> {
+def json-version-url []: any -> oneof<string, error> {
+    let target = $in
     let target_type = ($target | describe)
 
     if $target_type == "int" {
@@ -24,7 +25,7 @@ def json-version-url [target: any]: nothing -> oneof<string, error> {
 }
 
 def http-ws-url [target: any]: nothing -> oneof<string, error> {
-    ws-url-from-version-info $target (http get (json-version-url $target))
+    ws-url-from-version-info $target (http get ($target | json-version-url))
 }
 
 def wait-for-ws-url [target: any, max_time: duration, interval: duration]: nothing -> any {
@@ -136,7 +137,7 @@ def browser-env-candidate [name: string]: nothing -> oneof<path, nothing> {
         )
     ]
     | compact --empty
-    | each {|candidate| resolve-path-candidate $candidate }
+    | each {|candidate| $candidate | resolve-path-candidate }
     | compact
     | first
 }
@@ -192,7 +193,7 @@ def discover-browser-path []: nothing -> oneof<path, nothing> {
     }
 
     chromium-browser-candidates
-    | each {|candidate| resolve-path-candidate $candidate }
+    | each {|candidate| $candidate | resolve-path-candidate }
     | compact
     | first
 }
@@ -211,7 +212,7 @@ export def "cdp browser find" [
     let path = if $browser == null {
         discover-browser-path
     } else {
-        resolve-path-candidate $browser
+        $browser | resolve-path-candidate
     }
 
     if $path == null {

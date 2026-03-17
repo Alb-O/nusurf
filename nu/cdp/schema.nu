@@ -18,7 +18,8 @@ export def schema-domains [
     }
 }
 
-def enrich-entry [domain_name: string, member: string, entry: record]: nothing -> record {
+def enrich-entry [domain_name: string, member: string]: record -> record {
+    let entry = $in
     (
         $entry
         | upsert domain $domain_name
@@ -30,7 +31,7 @@ def schema-members [field: string, member: string, domain?: string]: nothing -> 
     schema-domains $domain
     | each {|domain_record|
         ($domain_record | get -o $field | default [])
-        | each {|entry| enrich-entry $domain_record.domain $member $entry }
+        | each {|entry| $entry | enrich-entry $domain_record.domain $member }
     }
     | flatten
 }
@@ -101,20 +102,21 @@ export def schema-lookup [
     $entry
 }
 
-def entry-member [entry: record]: nothing -> any {
-    $entry | get -o name id | compact | first
+def entry-member []: record -> any {
+    $in | get -o name id | compact | first
 }
 
-def enrich-search-entry [kind: string, entry: record]: nothing -> record {
+def enrich-search-entry [kind: string]: record -> record {
+    let entry = $in
     $entry
     | upsert kind $kind
-    | upsert member (entry-member $entry)
+    | upsert member ($entry | entry-member)
 }
 
 def search-results [kind: string, query: string]: nothing -> oneof<list<any>, error> {
     let needle = ($query | str downcase)
     schema-kind-entries $kind
-    | each {|entry| enrich-search-entry $kind $entry }
+    | each {|entry| $entry | enrich-search-entry $kind }
     | where {|entry|
         [
             $entry.qualified
@@ -125,7 +127,8 @@ def search-results [kind: string, query: string]: nothing -> oneof<list<any>, er
     }
 }
 
-def completion-results [entries: list<any>]: nothing -> record {
+def completion-results []: list<any> -> record {
+    let entries = $in
     {
         options: {
             completion_algorithm: substring
@@ -152,15 +155,15 @@ def completion-results [entries: list<any>]: nothing -> record {
     }
 }
 
-def completion-token [context: string]: nothing -> string {
-    $context | split words | last | default ""
+def completion-token []: string -> string {
+    $in | split words | last | default ""
 }
 
 # Complete CDP domain names from commandline context.
 export def complete-cdp-domain [
     context: string # Current commandline context.
 ] : nothing -> record {
-    let needle = (completion-token $context | str downcase)
+    let needle = ($context | completion-token | str downcase)
 
     {
         options: {
@@ -194,21 +197,21 @@ export def complete-cdp-domain [
 export def complete-cdp-command [
     context: string # Current commandline context.
 ] : nothing -> record {
-    completion-results (search-results "command" (completion-token $context))
+    search-results "command" ($context | completion-token) | completion-results
 }
 
 # Complete CDP event names from commandline context.
 export def complete-cdp-event [
     context: string # Current commandline context.
 ] : nothing -> record {
-    completion-results (search-results "event" (completion-token $context))
+    search-results "event" ($context | completion-token) | completion-results
 }
 
 # Complete CDP type names from commandline context.
 export def complete-cdp-type [
     context: string # Current commandline context.
 ] : nothing -> record {
-    completion-results (search-results "type" (completion-token $context))
+    search-results "type" ($context | completion-token) | completion-results
 }
 
 def validate-command-params [method: string, params: any, command: record]: nothing -> oneof<nothing, error> {

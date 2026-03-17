@@ -6,8 +6,9 @@ export def random-id []: nothing -> int {
 
 # Resolve an explicit path or a PATH command candidate.
 export def resolve-path-candidate [
-    candidate: string # Path or command candidate to resolve.
-] : nothing -> oneof<path, nothing> {
+    # Path or command candidate to resolve.
+] : string -> oneof<path, nothing> {
+    let candidate = $in
     let expanded = ($candidate | path expand)
 
     if ($expanded | path exists) {

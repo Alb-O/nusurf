@@ -30,7 +30,8 @@ def browser-devtools-root [browser_session: string]: nothing -> oneof<string, er
     $parts | get 0
 }
 
-def page-target-id-from-url [ws_url: string]: nothing -> oneof<string, nothing> {
+def page-target-id-from-url []: string -> oneof<string, nothing> {
+    let ws_url = $in
     let parts = ($ws_url | split row "/devtools/page/")
 
     if (($parts | length) == 2) {
@@ -123,7 +124,7 @@ def resolve-page-context [page?: any, browser?: any]: nothing -> oneof<record, e
                     $source | get -o targetId
                 }
             )
-            (page-target-id-from-url $session.url)
+            ($session.url | page-target-id-from-url)
         ]
         | compact
         | first
@@ -333,7 +334,8 @@ def state-is-valid [state: string]: nothing -> bool {
     $page_wait_states | any {|entry| $entry.value == $state }
 }
 
-def wait-state-match [inspection: record, state: string]: nothing -> record {
+def wait-state-match [state: string]: record -> record {
+    let inspection = $in
     let first = ($inspection | get -o first)
     let first_visible = ($inspection | get -o firstVisible)
     let visible_count = ($inspection | get -o visibleCount | default 0)
@@ -391,7 +393,7 @@ def wait-for-page-selector [
 
     loop {
         let inspection = (inspect-page-elements $selector --text $text --page $page --max-time $max_time)
-        let state_match = (wait-state-match $inspection $state)
+        let state_match = ($inspection | wait-state-match $state)
 
         if $state_match.matched {
             return $state_match.value
