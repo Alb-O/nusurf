@@ -11,11 +11,11 @@ const js_protocol_url = (
     + "devtools-protocol/master/json/js_protocol.json"
 )
 
-def fetch-schema [url: string, output: path] {
+def fetch-schema [url: string, output: path]: nothing -> nothing {
     http get -r $url | save -f $output
 }
 
-def main [] {
+def main []: nothing -> nothing {
     let tmp_dir = (mktemp -td)
 
     mkdir $schema_dir

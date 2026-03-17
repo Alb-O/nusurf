@@ -1,6 +1,6 @@
 use common.nu *
 
-def json-version-url [target: any] {
+def json-version-url [target: any]: nothing -> oneof<string, error> {
     let target_type = ($target | describe)
 
     if $target_type == "int" {
@@ -23,11 +23,11 @@ def json-version-url [target: any] {
     }
 }
 
-def http-ws-url [target: any] {
+def http-ws-url [target: any]: nothing -> oneof<string, error> {
     ws-url-from-version-info $target (http get (json-version-url $target))
 }
 
-def wait-for-ws-url [target: any, max_time: duration, interval: duration] {
+def wait-for-ws-url [target: any, max_time: duration, interval: duration]: nothing -> any {
     let deadline = (date now) + $max_time
 
     loop {
@@ -52,7 +52,7 @@ def wait-for-ws-url [target: any, max_time: duration, interval: duration] {
     }
 }
 
-def open-or-reuse-browser-session [name: string, ws_url: string, raw_buffer: int = 0] {
+def open-or-reuse-browser-session [name: string, ws_url: string, raw_buffer: int = 0]: nothing -> oneof<record, error> {
     let existing_session = (ws list | where id == $name | first)
 
     match $existing_session {
@@ -72,7 +72,7 @@ def open-or-reuse-browser-session [name: string, ws_url: string, raw_buffer: int
 # Resolve an HTTP discovery target, websocket URL, or version record to a CDP websocket URL.
 export def resolve-ws-url [
     target: any # Browser port, discovery URL, websocket URL, or version record.
-] {
+] : nothing -> oneof<string, error> {
     let target_type = ($target | describe)
 
     if $target_type == "int" {
@@ -102,7 +102,7 @@ export def resolve-ws-url [
     }
 }
 
-def ws-url-from-version-info [target: any, info: record] {
+def ws-url-from-version-info [target: any, info: record]: nothing -> oneof<string, error> {
     let ws_url = ($info | get -o webSocketDebuggerUrl)
 
     if $ws_url == null {
@@ -112,7 +112,7 @@ def ws-url-from-version-info [target: any, info: record] {
     $ws_url
 }
 
-def browser-env-candidate [name: string] {
+def browser-env-candidate [name: string]: nothing -> oneof<path, nothing> {
     let raw = ($env | get -o $name)
 
     if $raw == null {
@@ -141,7 +141,7 @@ def browser-env-candidate [name: string] {
     | first
 }
 
-def chromium-browser-candidates [] {
+def chromium-browser-candidates []: nothing -> list<string> {
     let common_candidates = [
         "google-chrome"
         "google-chrome-stable"
@@ -177,7 +177,7 @@ def chromium-browser-candidates [] {
     [$common_candidates $windows_candidates] | flatten
 }
 
-def discover-browser-path [] {
+def discover-browser-path []: nothing -> oneof<path, nothing> {
     let env_candidate = (
         [
             (browser-env-candidate "NU_CDP_BROWSER")
@@ -200,14 +200,14 @@ def discover-browser-path [] {
 # Resolve a CDP discovery target to its websocket URL.
 export def "cdp discover" [
     target: any # Browser port, discovery URL, websocket URL, or version record.
-] {
+] : nothing -> oneof<string, error> {
     resolve-ws-url $target
 }
 
 # Find a Chromium-compatible browser executable.
 export def "cdp browser find" [
     --browser(-b): string # Explicit browser path or command name to resolve.
-] {
+] : nothing -> oneof<path, error> {
     let path = if $browser == null {
         discover-browser-path
     } else {
@@ -232,7 +232,7 @@ export def "cdp browser wait" [
     target: any = 9222 # Browser port, discovery URL, websocket URL, or version record.
     --max-time(-m): duration = 10sec # Maximum time to wait for the browser target.
     --interval(-i): duration = 100ms # Delay between discovery attempts.
-] {
+] : nothing -> oneof<string, error> {
     wait-for-ws-url $target $max_time $interval
 }
 
@@ -243,7 +243,7 @@ export def "cdp browser open" [
     --raw-buffer(-r): int = 128 # Number of raw websocket messages to retain for `ws recv`.
     --max-time(-m): duration = 10sec # Maximum time to wait for the browser target.
     --interval(-i): duration = 100ms # Delay between discovery attempts.
-] {
+] : nothing -> oneof<record, error> {
     open-or-reuse-browser-session $name (wait-for-ws-url $target $max_time $interval) $raw_buffer
 }
 
@@ -254,12 +254,12 @@ export def "cdp browser start" [
     --name(-n): string = "browser" # Session name to register locally.
     --raw-buffer(-r): int = 128 # Number of raw websocket messages to retain for `ws recv`.
     --headless(-h) = true # Launch Chromium headless by default.
-    --user-data-dir(-u): string # Browser profile directory; a temp dir is used by default.
+    --user-data-dir(-u): path # Browser profile directory; a temp dir is used by default.
     --url: string = "about:blank" # Initial URL to open after launch.
     --job-tag(-t): string # Background job tag for the launched browser process.
     --max-time(-m): duration = 10sec # Maximum time to wait for the browser target.
     --interval(-i): duration = 100ms # Delay between discovery attempts.
-] {
+] : nothing -> oneof<record, error> {
     let existing_ws_url = (
         try { resolve-ws-url $port }
     )
@@ -310,8 +310,8 @@ export def "cdp browser stop" [
     browser?: any # Record returned by `cdp browser start`, or a session name.
     --session(-s): string # Explicit session name to close.
     --job-id(-j): int # Background job id to kill.
-    --user-data-dir(-u): string # Profile directory to remove.
-] {
+    --user-data-dir(-u): path # Profile directory to remove.
+] : nothing -> nothing {
     let browser_record = match ($browser | describe) {
         $kind if ($kind | str starts-with "record") => $browser
         _ => null
@@ -364,9 +364,9 @@ export def "cdp browser stop" [
 export def "cdp browser args" [
     --port(-p): int = 9222 # Remote debugging port to expose.
     --headless(-h) # Launch Chromium in headless mode.
-    --user-data-dir(-u): string # Browser profile directory to use.
+    --user-data-dir(-u): path # Browser profile directory to use.
     --url: string # Initial URL to open after launch.
-] {
+] : nothing -> list<string> {
     [
         $"--remote-debugging-port=($port)"
         "--remote-allow-origins=*"

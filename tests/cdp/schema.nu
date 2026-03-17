@@ -54,14 +54,14 @@ def main [] {
     let wait_state_completions = (complete-cdp-page-wait-state "cdp page wait #app --state vi")
     assert (($wait_state_completions.completions | where value == "visible" | length) == 1)
 
-    let schema_commands_signature = (scope commands | where name == "cdp schema commands" | get 0.signatures.any)
-    let schema_command_signature = (scope commands | where name == "cdp schema command" | get 0.signatures.any)
+    let schema_commands_signature = (scope commands | where name == "cdp schema commands" | get 0.signatures.nothing)
+    let schema_command_signature = (scope commands | where name == "cdp schema command" | get 0.signatures.nothing)
     let schema_search_signature = (
         scope commands
         | where name == "cdp schema search commands"
-        | get 0.signatures.any
+        | get 0.signatures.nothing
     )
-    let page_wait_signature = (scope commands | where name == "cdp page wait" | get 0.signatures.any)
+    let page_wait_signature = (scope commands | where name == "cdp page wait" | get 0.signatures.nothing)
 
     assert equal (
         $schema_commands_signature

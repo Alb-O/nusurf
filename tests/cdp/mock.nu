@@ -116,8 +116,8 @@ def "test cdp session completion" [http_port: int] {
 }
 
 def "test cdp command completion metadata" [] {
-    let call_signature = (scope commands | where name == "cdp call" | get 0.signatures.any)
-    let event_signature = (scope commands | where name == "cdp event" | get 0.signatures.any)
+    let call_signature = (scope commands | where name == "cdp call" | get 0.signatures.nothing)
+    let event_signature = (scope commands | where name == "cdp event" | get 0.signatures.nothing)
 
     assert equal (
         $call_signature
