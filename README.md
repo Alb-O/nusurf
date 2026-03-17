@@ -253,11 +253,11 @@ cargo test --test integration_tests --all-features
 
 # run the mock-driven Nu coverage
 cargo build --bin nu_plugin_nusurf --bin nusurf_live_fixture_server --all-features
-nu --no-config-file -- tests/run_suite.nu mock_all
+./tests/run_suite mock_all
 
 # run the live browser suites
 cargo build --bin nu_plugin_nusurf --bin nusurf_live_fixture_server --all-features
-nu --no-config-file -- tests/run_suite.nu browser_all
+./tests/run_suite browser_all
 ```
 
-`--verbose` on `tests/run_suite.nu` prints stdout and stderr even on success.
+`--verbose` on `./tests/run_suite` prints stdout and stderr even on success.

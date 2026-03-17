@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+nu_script="$script_dir/run_suite.nu"
+plugin_path="$repo_root/target/debug/nu_plugin_nusurf"
+
+if command -v nu >/dev/null 2>&1; then
+  exec nu \
+    --no-config-file \
+    --plugins "$plugin_path" \
+    -- "$nu_script" \
+    "$@"
+fi
+
+exec nix --extra-experimental-features 'nix-command flakes' \
+  shell nixpkgs#nushell \
+  -c nu \
+    --no-config-file \
+    --plugins "$plugin_path" \
+    -- "$nu_script" \
+    "$@"
