@@ -99,7 +99,7 @@ The full state shape looks like this:
 {
   kind: "nusurf/cdp-session-state"
   version: 1
-  currentSession: "work"
+  current_session: "work"
   sessions: {
     work: {
       name: "work"
@@ -112,7 +112,7 @@ The full state shape looks like this:
       }
       project: "demo"
       profile: "team-a"
-      updatedAt: 2026-03-17T12:00:00+00:00
+      updated_at: 2026-03-17T12:00:00+00:00
     }
   }
 }

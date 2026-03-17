@@ -18,7 +18,7 @@ def empty-session-state []: nothing -> record {
     {
         kind: $session_state_kind
         version: $session_state_version
-        currentSession: null
+        current_session: null
         sessions: {}
     }
 }
@@ -38,7 +38,7 @@ def normalize-session-record [name: string, session?: any]: nothing -> record {
         page: ($session_record | get -o page)
         project: ($session_record | get -o project)
         profile: ($session_record | get -o profile)
-        updatedAt: ($session_record | get -o updatedAt)
+        updated_at: ($session_record | get -o updated_at)
     }
 }
 
@@ -94,11 +94,7 @@ def normalize-session-state [state?: any]: nothing -> record {
     }
 
     let sessions = (normalize-session-registry ($state_record | get -o sessions))
-    let current_session = (
-        $state_record
-        | get -o currentSession
-        | default null
-    )
+    let current_session = ($state_record | get -o current_session | default null)
     let current_session_name = (
         if $current_session == null {
             null
@@ -110,7 +106,7 @@ def normalize-session-state [state?: any]: nothing -> record {
     {
         kind: $kind
         version: $session_state_version
-        currentSession: (
+        current_session: (
             if (
                 ($current_session_name != null)
                 and (($sessions | columns) | any {|name| $name == $current_session_name })
@@ -126,7 +122,7 @@ def normalize-session-state [state?: any]: nothing -> record {
 
 def validate-imported-session-state [state: any]: nothing -> record {
     let state_record = (expect-record $state "CDP session state")
-    let imported_current_session = ($state_record | get -o currentSession)
+    let imported_current_session = ($state_record | get -o current_session)
     let normalized = (normalize-session-state $state)
 
     if (
@@ -153,7 +149,7 @@ def legacy-session-state []: nothing -> any {
     }
 
     normalize-session-state {
-        currentSession: $legacy_current
+        current_session: $legacy_current
         sessions: ($legacy_sessions | default {})
     }
 }
@@ -191,7 +187,7 @@ def session-registry []: nothing -> record {
 }
 
 def current-session-name []: nothing -> any {
-    session-state-record | get -o currentSession
+    session-state-record | get -o current_session
 }
 
 def current-browser-context []: nothing -> any {
@@ -280,13 +276,13 @@ def merge-session-record [
         )
         project: ($project | default ($previous | get -o project))
         profile: ($profile | default ($previous | get -o profile))
-        updatedAt: (date now)
+        updated_at: (date now)
     }
 }
 
 def list-session-summaries [state: record]: nothing -> list<any> {
     let sessions = ($state | get sessions)
-    let current_name = ($state | get -o currentSession)
+    let current_name = ($state | get -o current_session)
 
     if (($sessions | columns | length) == 0) {
         return []
@@ -297,11 +293,11 @@ def list-session-summaries [state: record]: nothing -> list<any> {
         {
             name: $name
             current: ($name == $current_name)
-            browserSession: ($session | get -o browser.session)
-            pageSession: ($session | get -o page.session)
+            browser_session: ($session | get -o browser.session)
+            page_session: ($session | get -o page.session)
             project: ($session | get -o project)
             profile: ($session | get -o profile)
-            updatedAt: ($session | get -o updatedAt)
+            updated_at: ($session | get -o updated_at)
         }
     }
 }
@@ -353,10 +349,10 @@ export def --env session-state-ensure []: nothing -> record {
 export def --env "cdp session enable" []: nothing -> record {
     let state = (session-state-ensure)
     let current = (
-        if $state.currentSession == null {
+        if $state.current_session == null {
             null
         } else {
-            $state.sessions | get -o $state.currentSession
+            $state.sessions | get -o $state.current_session
         }
     )
 
@@ -411,7 +407,7 @@ export def --env "cdp session save" [
     update-session-state (
         $current_state
         | upsert sessions ($current_state.sessions | upsert $session_name $next_session)
-        | upsert currentSession $session_name
+        | upsert current_session $session_name
     ) | ignore
 
     $next_session
@@ -424,7 +420,7 @@ export def --env "cdp session use" [
     let current_state = (session-state-ensure)
     let session = (resolve-session-record $name)
 
-    update-session-state ($current_state | upsert currentSession $session.name) | ignore
+    update-session-state ($current_state | upsert current_session $session.name) | ignore
 
     if $session.browser == null {
         try { hide-env CDP_BROWSER }
@@ -468,11 +464,11 @@ export def --env "cdp session drop" [
     update-session-state (
         $current_state
         | upsert sessions ($current_state.sessions | reject $session_name)
-        | upsert currentSession (
-            if $current_state.currentSession == $session_name {
+        | upsert current_session (
+            if $current_state.current_session == $session_name {
                 null
             } else {
-                $current_state.currentSession
+                $current_state.current_session
             }
         )
     ) | ignore

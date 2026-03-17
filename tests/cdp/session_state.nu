@@ -11,7 +11,7 @@ def main [] {
     let initial_state = (cdp session state)
     assert equal $initial_state.kind "nusurf/cdp-session-state"
     assert equal $initial_state.version 1
-    assert equal $initial_state.currentSession null
+    assert equal $initial_state.current_session null
     assert equal $initial_state.sessions {}
 
     $env.CDP_BROWSER = {
@@ -33,7 +33,7 @@ def main [] {
     assert equal $saved.profile "team-a"
 
     let state_after_save = (cdp session state)
-    assert equal $state_after_save.currentSession "work"
+    assert equal $state_after_save.current_session "work"
     assert equal (($state_after_save.sessions | columns) | length) 1
     assert equal (($state_after_save.sessions | get work.name)) "work"
 
@@ -41,8 +41,8 @@ def main [] {
     assert equal ($sessions | length) 1
     assert equal ($sessions | get 0.name) "work"
     assert equal ($sessions | get 0.current) true
-    assert equal ($sessions | get 0.browserSession) "browser-a"
-    assert equal ($sessions | get 0.pageSession) "page-a"
+    assert equal ($sessions | get 0.browser_session) "browser-a"
+    assert equal ($sessions | get 0.page_session) "page-a"
 
     cdp use --clear | ignore
 
@@ -63,7 +63,7 @@ def main [] {
     let exported_state = (open --raw $exported | from nuon)
     assert equal $exported_state.kind "nusurf/cdp-session-state"
     assert equal $exported_state.version 1
-    assert equal $exported_state.currentSession "work"
+    assert equal $exported_state.current_session "work"
     assert equal (($exported_state.sessions | get work.profile)) "team-b"
 
     let dropped = (cdp session drop)
@@ -74,7 +74,7 @@ def main [] {
     let imported = (cdp session import $exported)
     assert equal $imported.kind "nusurf/cdp-session-state"
     assert equal $imported.version 1
-    assert equal $imported.currentSession "work"
+    assert equal $imported.current_session "work"
     assert equal (($imported.sessions | get work.project)) "g-p-demo"
     assert equal (($imported.sessions | get work.profile)) "team-b"
 
@@ -87,7 +87,7 @@ def main [] {
     {
         kind: "nusurf/cdp-session-state"
         version: 1
-        currentSession: "missing"
+        current_session: "missing"
         sessions: {}
     } | to nuon | save -f $invalid_state_path
 
