@@ -29,18 +29,6 @@ export use cdp/page.nu [
     "cdp page eval"
 ]
 
-export use cdp/session_state.nu [
-    "cdp session enable"
-    "cdp session state"
-    "cdp session export"
-    "cdp session import"
-    "cdp session save"
-    "cdp session use"
-    "cdp session current"
-    "cdp session list"
-    "cdp session drop"
-]
-
 export use cdp/session.nu [
     "cdp open"
     "cdp call"
