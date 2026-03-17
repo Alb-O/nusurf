@@ -55,6 +55,8 @@ Page commands default to the current page from `cdp use`, and browser-aware comm
 
 If you switch between multiple browser/page contexts in the same Nu shell, you can save the current `cdp use` selection under a name and restore it later.
 
+The session registry is stored as a versioned Nu record, so it is easy to inspect, test, export as NUON, and load back into another shell.
+
 If you installed nusurf with the Home Manager module, `cdp.nu` is imported automatically. Otherwise import it explicitly:
 
 ```nu
@@ -76,6 +78,7 @@ cdp session save work --project demo --profile team-a
 # inspect saved names
 cdp session list
 cdp session current
+cdp session state
 
 # clear the active browser/page binding in this shell
 cdp use --clear
@@ -86,11 +89,43 @@ cdp session use work
 
 Session names support letters, numbers, `.`, `_`, and `-`.
 
-`cdp session save`, `cdp session use`, and `cdp session drop` auto-enable the backing overlay, so `cdp session enable` is optional. `cdp session enable` is mainly useful if you want to inspect the current overlay/session state directly.
-
 `cdp browser open`, `cdp browser start`, and `cdp page new` all support `--use` for the common "create or attach, then immediately make current" workflow.
 
-These saved sessions are shell-local overlay state. They survive `cdp use --clear` inside the current Nu process, but they do not persist across a fresh `nu` process.
+`cdp session enable` is optional. It only ensures that the structured session registry exists in the current shell and returns a summary.
+
+The full state shape looks like this:
+
+```nu
+{
+  kind: "nusurf/cdp-session-state"
+  version: 1
+  currentSession: "work"
+  sessions: {
+    work: {
+      name: "work"
+      browser: {session: "...", url: "..."}
+      page: {
+        browserSession: "..."
+        session: "..."
+        targetId: "..."
+        webSocketDebuggerUrl: "..."
+      }
+      project: "demo"
+      profile: "team-a"
+      updatedAt: 2026-03-17T12:00:00+00:00
+    }
+  }
+}
+```
+
+This state is shell-local by default. It survives `cdp use --clear` inside the current Nu process, but it does not persist across a fresh `nu` process unless you export it.
+
+Export and import are explicit:
+
+```nu
+cdp session export .nusurf-sessions.nuon
+cdp session import .nusurf-sessions.nuon
+```
 
 Metadata-only updates are supported without changing the saved binding:
 

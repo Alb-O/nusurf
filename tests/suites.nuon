@@ -12,8 +12,8 @@
       # schema introspection is pure, doesn't need fixture connection args
       args_mode: none
     }
-    cdp_session_overlay: {
-      path: tests/cdp/session_overlay.nu
+    cdp_session_state: {
+      path: tests/cdp/session_state.nu
       args_mode: none
     }
     browser_basic: {
@@ -74,7 +74,7 @@
       scripts: [
         cdp_mock
         cdp_schema
-        cdp_session_overlay
+        cdp_session_state
       ]
     }
     mock_all: {
