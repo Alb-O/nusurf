@@ -103,7 +103,8 @@ export def schema-lookup [
 }
 
 def entry-member []: record -> any {
-    $in | get -o name id | compact | first
+    let entry = $in
+    $entry.name? | default $entry.id?
 }
 
 def enrich-search-entry [kind: string]: record -> record {
@@ -121,7 +122,7 @@ def search-results [kind: string, query: string]: nothing -> oneof<list<any>, er
         [
             $entry.qualified
             ($entry.member | into string)
-            ($entry | get -o description | default "" | into string)
+            ($entry.description? | default "" | into string)
         ]
         | any {|value| ($value | str downcase | str contains $needle) }
     }
@@ -143,8 +144,7 @@ def completion-results []: list<any> -> record {
                     description: (
                         # upstream protocol descriptions contain
                         # hard-wrapped newlines, even mid-sentence
-                        $entry
-                        | get -o description
+                        $entry.description?
                         | default ""
                         | str replace -a "\n" " "
                         | str trim
@@ -153,10 +153,6 @@ def completion-results []: list<any> -> record {
             }
         )
     }
-}
-
-def completion-token []: string -> string {
-    $in | split words | last | default ""
 }
 
 # Complete CDP domain names from commandline context.
@@ -215,7 +211,7 @@ export def complete-cdp-type [
 }
 
 def validate-command-params [method: string, params: any, command: record]: nothing -> oneof<nothing, error> {
-    let parameters = ($command | get -o parameters | default [])
+    let parameters = ($command.parameters? | default [])
     let allowed = ($parameters | get name)
     let required = (
         $parameters
@@ -273,9 +269,9 @@ export def "cdp schema domains" []: nothing -> list<any> {
     schema-domains
     | each {|domain_record|
         $domain_record
-        | upsert commands (($domain_record | get -o commands | default [] | length))
-        | upsert events (($domain_record | get -o events | default [] | length))
-        | upsert types (($domain_record | get -o types | default [] | length))
+        | upsert commands (($domain_record.commands? | default [] | length))
+        | upsert events (($domain_record.events? | default [] | length))
+        | upsert types (($domain_record.types? | default [] | length))
     }
 }
 

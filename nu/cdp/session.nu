@@ -11,7 +11,7 @@ use schema.nu [
 export def complete-cdp-session [
     context: string # Current commandline context.
 ] : nothing -> record {
-    let needle = ($context | split words | last | default "" | str downcase)
+    let needle = ($context | completion-token | str downcase)
 
     {
         options: {
@@ -33,58 +33,25 @@ export def complete-cdp-session [
 }
 
 def resolve-target-id [target: any]: nothing -> oneof<string, error> {
-    let target_type = ($target | describe)
-
-    match $target_type {
-        "string" => $target
-        $record_type if ($record_type | str starts-with "record") => {
-            let target_id = (
-                $target
-                | get -o targetId id
-                | compact
-                | first
-            )
-
-            if $target_id != null {
-                return $target_id
-            }
-
-            error make {
-                msg: $"Unsupported CDP target identifier type: ($target_type)"
-            }
-        }
+    match $target {
+        $target_id if (($target_id | describe) == "string") => $target_id
+        {targetId: $target_id} if $target_id != null => $target_id
+        {id: $target_id} if $target_id != null => $target_id
         _ => {
             error make {
-                msg: $"Unsupported CDP target identifier type: ($target_type)"
+                msg: $"Unsupported CDP target identifier type: ($target | describe)"
             }
         }
     }
 }
 
 def resolve-session-id [session: any]: nothing -> oneof<string, error> {
-    let session_type = ($session | describe)
-
-    match $session_type {
-        "string" => $session
-        $record_type if ($record_type | str starts-with "record") => {
-            let session_id = (
-                $session
-                | get -o sessionId
-                | compact
-                | first
-            )
-
-            if $session_id != null {
-                return $session_id
-            }
-
-            error make {
-                msg: $"Unsupported CDP session identifier type: ($session_type)"
-            }
-        }
+    match $session {
+        $session_id if (($session_id | describe) == "string") => $session_id
+        {sessionId: $session_id} if $session_id != null => $session_id
         _ => {
             error make {
-                msg: $"Unsupported CDP session identifier type: ($session_type)"
+                msg: $"Unsupported CDP session identifier type: ($session | describe)"
             }
         }
     }
@@ -114,7 +81,7 @@ export def "cdp call" [
         validate-command-input $method $params
     }
 
-    let request_id = if $id == null { random-id } else { $id }
+    let request_id = ($id | default (random-id))
     let command = (
         {
             id: $request_id
@@ -135,7 +102,7 @@ export def "cdp call" [
         }
     }
 
-    let response_error = ($response | get -o error)
+    let response_error = $response.error?
 
     if $response_error != null {
         error make {
@@ -143,7 +110,7 @@ export def "cdp call" [
         }
     }
 
-    $response | get -o result
+    $response.result?
 }
 
 # Read the next CDP event, optionally filtered by method or attached session.

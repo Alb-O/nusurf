@@ -17,10 +17,10 @@ def expect-known-context-keys [context_record: record]: nothing -> record {
     let unknown_keys = (
         $context_record
         | columns
-        | where {|key| not ($reserved_context_keys | any {|reserved| $reserved == $key }) }
+        | where {|key| $key not-in $reserved_context_keys }
     )
 
-    if (($unknown_keys | length) > 0) {
+    if (not ($unknown_keys | is-empty)) {
         error make {
             msg: (
                 "Unsupported CDP context keys: "
@@ -37,10 +37,10 @@ def expect-known-nusurf-keys [nusurf_record: record]: nothing -> record {
     let unknown_keys = (
         $nusurf_record
         | columns
-        | where {|key| not ($reserved_nusurf_keys | any {|reserved| $reserved == $key }) }
+        | where {|key| $key not-in $reserved_nusurf_keys }
     )
 
-    if (($unknown_keys | length) > 0) {
+    if (not ($unknown_keys | is-empty)) {
         error make {
             msg: (
                 "Unsupported nusurf context keys: "
@@ -71,8 +71,8 @@ def normalize-nusurf-record [value: any]: nothing -> record {
     )
 
     {
-        browser: ($nusurf_record | get -o browser)
-        page: ($nusurf_record | get -o page)
+        browser: $nusurf_record.browser?
+        page: $nusurf_record.page?
     }
 }
 
@@ -86,9 +86,9 @@ def normalize-context-record [context?: any]: nothing -> record {
     )
 
     {
-        nusurf: (normalize-nusurf-record ($context_record | get -o nusurf))
-        user: (normalize-owned-record ($context_record | get -o user) "user context metadata")
-        plugin: (normalize-owned-record ($context_record | get -o plugin) "plugin context metadata")
+        nusurf: (normalize-nusurf-record $context_record.nusurf?)
+        user: (normalize-owned-record $context_record.user? "user context metadata")
+        plugin: (normalize-owned-record $context_record.plugin? "plugin context metadata")
     }
 }
 
@@ -100,8 +100,8 @@ def normalize-context-record [context?: any]: nothing -> record {
 export def "cdp context capture" []: nothing -> record {
     normalize-context-record {
         nusurf: {
-            browser: ($env | get -o CDP_BROWSER)
-            page: ($env | get -o CDP_PAGE)
+            browser: $env.CDP_BROWSER?
+            page: $env.CDP_PAGE?
         }
     }
 }

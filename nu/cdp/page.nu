@@ -1,4 +1,4 @@
-use common.nu [random-id]
+use common.nu [completion-token random-id]
 use session.nu [
     "cdp call"
     "cdp close"
@@ -39,16 +39,28 @@ def page-target-id-from-url []: string -> oneof<string, nothing> {
     }
 }
 
+def context-session-name [value: any, label: string]: nothing -> oneof<string, nothing, error> {
+    match $value {
+        null => null
+        $session_name if (($session_name | describe) == "string") => $session_name
+        {session: $session_name} if $session_name != null => $session_name
+        {id: $session_name} if $session_name != null => $session_name
+        _ => {
+            error make {
+                msg: $"Unsupported ($label) context type: ($value | describe)"
+            }
+        }
+    }
+}
+
 def resolve-browser-context [browser?: any]: nothing -> oneof<record, error> {
-    let source = (
-        [
-            $browser
-            ($env | get -o CDP_BROWSER)
-            ($env | get -o CDP_PAGE | get -o browserSession)
-        ]
-        | compact
-        | first
-    )
+    let source = if $browser != null {
+        $browser
+    } else if $env.CDP_BROWSER? != null {
+        $env.CDP_BROWSER
+    } else {
+        $env.CDP_PAGE?.browserSession?
+    }
 
     if $source == null {
         error make {
@@ -56,21 +68,11 @@ def resolve-browser-context [browser?: any]: nothing -> oneof<record, error> {
         }
     }
 
-    let source_type = ($source | describe)
-    let session_name = match $source_type {
-        "string" => $source
-        $record_type if ($record_type | str starts-with "record") => {
-            $source
-            | get -o session id
-            | compact
-            | first
-        }
-        _ => null
-    }
+    let session_name = (context-session-name $source "browser")
 
     if $session_name == null {
         error make {
-            msg: $"Unsupported browser context type: ($source_type)"
+            msg: $"Unsupported browser context type: ($source | describe)"
         }
     }
 
@@ -83,14 +85,7 @@ def resolve-browser-context [browser?: any]: nothing -> oneof<record, error> {
 }
 
 def resolve-page-context [page?: any, browser?: any]: nothing -> oneof<record, error> {
-    let source = (
-        [
-            $page
-            ($env | get -o CDP_PAGE)
-        ]
-        | compact
-        | first
-    )
+    let source = ($page | default $env.CDP_PAGE?)
 
     if $source == null {
         error make {
@@ -98,58 +93,31 @@ def resolve-page-context [page?: any, browser?: any]: nothing -> oneof<record, e
         }
     }
 
-    let source_type = ($source | describe)
-    let session_name = match $source_type {
-        "string" => $source
-        $record_type if ($record_type | str starts-with "record") => {
-            $source
-            | get -o session id
-            | compact
-            | first
-        }
-        _ => null
-    }
+    let session_name = (context-session-name $source "page")
 
     if $session_name == null {
         error make {
-            msg: $"Unsupported page context type: ($source_type)"
+            msg: $"Unsupported page context type: ($source | describe)"
         }
     }
 
     let session = (ws-session-record $session_name)
-    let target_id = (
-        [
-            (
-                if ($source_type | str starts-with "record") {
-                    $source | get -o targetId
-                }
-            )
-            ($session.url | page-target-id-from-url)
-        ]
-        | compact
-        | first
-    )
-    let browser_session = (
-        [
-            (
-                if ($source_type | str starts-with "record") {
-                    $source | get -o browserSession
-                }
-            )
-            (
-                if $browser != null {
-                    (resolve-browser-context $browser).session
-                }
-            )
-            ($env | get -o CDP_BROWSER | get -o session)
-        ]
-        | compact
-        | first
-    )
+    let target_id = match $source {
+        {targetId: $source_target_id} if $source_target_id != null => $source_target_id
+        _ => ($session.url | page-target-id-from-url)
+    }
+    let browser_session = if $browser != null {
+        (resolve-browser-context $browser).session
+    } else {
+        match $source {
+            {browserSession: $source_browser_session} if $source_browser_session != null => $source_browser_session
+            _ => $env.CDP_BROWSER?.session?
+        }
+    }
 
     if $target_id == null {
         error make {
-            msg: $"Unsupported page context type: ($source_type)"
+            msg: $"Unsupported page context type: ($source | describe)"
         }
     }
 
@@ -331,14 +299,14 @@ def run-page-action [
 }
 
 def state-is-valid [state: string]: nothing -> bool {
-    $page_wait_states | any {|entry| $entry.value == $state }
+    $state in ($page_wait_states | get value)
 }
 
 def wait-state-match [state: string]: record -> record {
     let inspection = $in
-    let first = ($inspection | get -o first)
-    let first_visible = ($inspection | get -o firstVisible)
-    let visible_count = ($inspection | get -o visibleCount | default 0)
+    let first = $inspection.first?
+    let first_visible = $inspection.firstVisible?
+    let visible_count = ($inspection.visibleCount? | default 0)
 
     match $state {
         "present" => {
@@ -412,7 +380,7 @@ def wait-for-page-selector [
 export def complete-cdp-page-wait-state [
     context: string
 ] : nothing -> record {
-    let needle = ($context | split words | last | default "" | str downcase)
+    let needle = ($context | completion-token | str downcase)
 
     {
         options: {
@@ -444,45 +412,20 @@ export def --env "cdp use" [
         }
     }
 
-    let current_page = ($env | get -o CDP_PAGE)
-    let current_page_browser_session = ($current_page | get -o browserSession)
-    let page_context = (
-        [
-            (
-                if $page != null {
-                    resolve-page-context $page $browser
-                }
-            )
-            (
-                if (($page == null) and ($context != null)) {
-                    try { resolve-page-context $context $browser }
-                }
-            )
-        ]
-        | compact
-        | first
-    )
-    let browser_context = (
-        [
-            (
-                if $browser != null {
-                    resolve-browser-context $browser
-                }
-            )
-            (
-                if (($page_context != null) and ($page_context.browserSession != null)) {
-                    resolve-browser-context $page_context.browserSession
-                }
-            )
-            (
-                if (($browser == null) and ($page == null) and ($context != null)) {
-                    try { resolve-browser-context $context }
-                }
-            )
-        ]
-        | compact
-        | first
-    )
+    let current_page = $env.CDP_PAGE?
+    let current_page_browser_session = $current_page.browserSession?
+    let page_context = if $page != null {
+        resolve-page-context $page $browser
+    } else if $context != null {
+        try { resolve-page-context $context $browser }
+    }
+    let browser_context = if $browser != null {
+        resolve-browser-context $browser
+    } else if (($page_context != null) and ($page_context.browserSession != null)) {
+        resolve-browser-context $page_context.browserSession
+    } else if (($page == null) and ($context != null)) {
+        try { resolve-browser-context $context }
+    }
 
     if (($browser_context == null) and ($page_context == null)) {
         error make {
@@ -508,8 +451,8 @@ export def --env "cdp use" [
     }
 
     {
-        browser: ($env | get -o CDP_BROWSER)
-        page: ($env | get -o CDP_PAGE)
+        browser: $env.CDP_BROWSER?
+        page: $env.CDP_PAGE?
     }
 }
 
@@ -557,7 +500,7 @@ export def "cdp page list" [
     --browser(-b): any # Browser record or websocket session name; defaults to the current browser.
 ] : nothing -> oneof<list<any>, error> {
     let browser_context = (resolve-browser-context $browser)
-    let current_target_id = ($env | get -o CDP_PAGE | get -o targetId)
+    let current_target_id = $env.CDP_PAGE?.targetId?
     let sessions = (ws list)
     let targets = (cdp call $browser_context.session "Target.getTargets" | get targetInfos)
 
@@ -602,7 +545,7 @@ export def --env "cdp page close" [
 
     try { cdp close $page_context.session | ignore }
 
-    if (($env | get -o CDP_PAGE | get -o session) == $page_context.session) {
+    if ($env.CDP_PAGE?.session? == $page_context.session) {
         try { hide-env CDP_PAGE }
     }
 
@@ -710,7 +653,7 @@ export def "cdp page eval" [
             awaitPromise: $await_promise
         } --max-time $max_time
     )
-    let exception = ($evaluation | get -o exceptionDetails)
+    let exception = $evaluation.exceptionDetails?
 
     if $exception != null {
         error make {
@@ -721,6 +664,6 @@ export def "cdp page eval" [
     if $full {
         $evaluation
     } else {
-        $evaluation | get -o result.value
+        $evaluation.result?.value?
     }
 }

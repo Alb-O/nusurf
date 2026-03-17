@@ -153,45 +153,33 @@ def suite-catalog [] {
     open $suite_catalog_file
 }
 
-def catalog-script [script_id: string] {
-    let script = (suite-catalog | get -o scripts | get -o $script_id)
+def catalog-entry [group: string, key: string, label: string] {
+    let entry = (suite-catalog | get -o $group | get -o $key)
 
-    if $script == null {
+    if $entry == null {
         error make {
-            msg: $"Unknown suite script: ($script_id)"
+            msg: $"Unknown ($label): ($key)"
         }
     }
 
-    $script
+    $entry
+}
+
+def catalog-script [script_id: string] {
+    catalog-entry "scripts" $script_id "suite script"
 }
 
 def catalog-harness [harness_id: string] {
-    let harness = (suite-catalog | get -o harnesses | get -o $harness_id)
-
-    if $harness == null {
-        error make {
-            msg: $"Unknown suite harness: ($harness_id)"
-        }
-    }
-
-    $harness | upsert id $harness_id
+    catalog-entry "harnesses" $harness_id "suite harness" | upsert id $harness_id
 }
 
 def catalog-suite [suite: string] {
-    let suite_record = (suite-catalog | get -o suites | get -o $suite)
-
-    if $suite_record == null {
-        error make {
-            msg: $"Unknown test suite: ($suite)"
-        }
-    }
-
-    $suite_record | upsert name $suite
+    catalog-entry "suites" $suite "test suite" | upsert name $suite
 }
 
 def leaf-suite-runs [suite: string] {
     let suite_record = (catalog-suite $suite)
-    let included = ($suite_record | get -o includes)
+    let included = $suite_record.includes?
 
     if $included != null {
         # suite composition stays in the catalog so wrappers only choose entrypoints.
@@ -212,7 +200,7 @@ def leaf-suite-runs [suite: string] {
 
             $script | upsert id $script_id
         }
-        | where {|script| not (($script | get -o ignore) | default false) }
+        | where {|script| not ($script.ignore? | default false) }
     )
 
     [
@@ -250,8 +238,8 @@ def start-fixture-server [
 }
 
 def stop-fixture-server [fixture_server?: record] {
-    let job_id = ($fixture_server | get -o jobId)
-    let metadata_file = ($fixture_server | get -o metadataFile)
+    let job_id = if $fixture_server != null { $fixture_server.jobId? }
+    let metadata_file = if $fixture_server != null { $fixture_server.metadataFile? }
 
     if $job_id != null {
         try { job kill $job_id }
@@ -336,7 +324,7 @@ def script-args [
     script: record
     context: record
 ] {
-    let args_mode = ($script | get -o args_mode)
+    let args_mode = $script.args_mode?
 
     # most scripts follow their harness convention; a few opt out with args_mode.
     match ($args_mode | default $harness.kind) {
@@ -344,7 +332,7 @@ def script-args [
         "mock_ws" => [$context.ws_url]
         "mock_cdp" => [($context.http_port | into string) $context.ws_url]
         "live_browser" => (
-            if (($harness | get -o needs_fixture) | default false) {
+            if ($harness.needs_fixture? | default false) {
                 [($context.http_port | into string) ($context.fixture_port | into string)]
             } else {
                 [($context.http_port | into string)]
@@ -355,6 +343,20 @@ def script-args [
                 msg: $"Unsupported script args mode: ($args_mode)"
             }
         )
+    }
+}
+
+def run-suite-scripts [
+    repo_root: string
+    suite_run: record
+    plugin_path: string
+    script_context: record
+    verbose: bool
+] {
+    $suite_run.scripts | each {|script|
+        run-script-record $repo_root $suite_run.suite $suite_run.harness.id $plugin_path $script (
+            script-args $suite_run.harness $script $script_context
+        ) $verbose
     }
 }
 
@@ -374,16 +376,7 @@ def run-mock-ws-suite [
             ws_url: $ws_url
         }
 
-        for script in $suite_run.scripts {
-            $run_results = (
-                $run_results
-                | append (
-                    run-script-record $repo_root $suite_run.suite $suite_run.harness.id $plugin_path $script (
-                        script-args $suite_run.harness $script $script_context
-                    ) $verbose
-                )
-            )
-        }
+        $run_results = (run-suite-scripts $repo_root $suite_run $plugin_path $script_context $verbose)
     } finally {
         stop-fixture-server $fixture
     }
@@ -410,16 +403,7 @@ def run-mock-cdp-suite [
             ws_url: $ws_url
         }
 
-        for script in $suite_run.scripts {
-            $run_results = (
-                $run_results
-                | append (
-                    run-script-record $repo_root $suite_run.suite $suite_run.harness.id $plugin_path $script (
-                        script-args $suite_run.harness $script $script_context
-                    ) $verbose
-                )
-            )
-        }
+        $run_results = (run-suite-scripts $repo_root $suite_run $plugin_path $script_context $verbose)
     } finally {
         stop-fixture-server $fixture
     }
@@ -438,7 +422,7 @@ def run-live-browser-suite [
     port?: int
 ] {
     let chosen_port = ($port | default (random int 20000..60000))
-    let needs_fixture = (($suite_run.harness | get -o needs_fixture) | default false)
+    let needs_fixture = ($suite_run.harness.needs_fixture? | default false)
     let browser_workflow = (
         cdp browser start --browser $browser --port $chosen_port --name $"runner-browser-($chosen_port)" --max-time (
             $max_time
@@ -447,8 +431,6 @@ def run-live-browser-suite [
     let fixture_server = (
         if $needs_fixture {
             start-fixture-server $fixture_binary "live-http"
-        } else {
-            null
         }
     )
     mut run_results = []
@@ -456,19 +438,10 @@ def run-live-browser-suite [
     try {
         let script_context = {
             http_port: $chosen_port
-            fixture_port: ($fixture_server | get -o metadata)
+            fixture_port: (if $fixture_server != null { $fixture_server.metadata? })
         }
 
-        for script in $suite_run.scripts {
-            $run_results = (
-                $run_results
-                | append (
-                    run-script-record $repo_root $suite_run.suite $suite_run.harness.id $plugin_path $script (
-                        script-args $suite_run.harness $script $script_context
-                    ) $verbose
-                )
-            )
-        }
+        $run_results = (run-suite-scripts $repo_root $suite_run $plugin_path $script_context $verbose)
     } finally {
         stop-fixture-server $fixture_server
         cdp browser stop $browser_workflow
@@ -552,12 +525,12 @@ export def "run-test-suite" [
                 }
             }
         )
-        let suite_results = ($suite_outcome | get results)
-        let suite_error = ($suite_outcome | get error)
+        let suite_results = $suite_outcome.results
+        let suite_error = $suite_outcome.error
         let suite_duration = ((date now) - $suite_started_at)
 
         if $suite_error != null {
-            if (($suite_results | length) > 0) {
+            if (not ($suite_results | is-empty)) {
                 print-table (summarize-run-results $suite_results --failed) --stderr
             }
             print-table (suite-summary-record $suite_name $harness_name $script_count $suite_duration $suite_results "fail") --expanded --stderr

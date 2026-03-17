@@ -4,6 +4,10 @@ export def random-id []: nothing -> int {
     random int 1..2147483647
 }
 
+export def completion-token []: string -> string {
+    $in | split words | last | default ""
+}
+
 # Resolve an explicit path or a PATH command candidate.
 export def resolve-path-candidate [
     # Path or command candidate to resolve.

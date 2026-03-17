@@ -71,8 +71,8 @@ def open-or-reuse-browser-session [name: string, ws_url: string, raw_buffer: int
 }
 
 def use-browser-context [browser_context: record]: nothing -> nothing {
-    let current_page = ($env | get -o CDP_PAGE)
-    let current_page_browser_session = ($current_page | get -o browserSession)
+    let current_page = $env.CDP_PAGE?
+    let current_page_browser_session = $current_page.browserSession?
 
     $env.CDP_BROWSER = $browser_context
 
@@ -118,7 +118,7 @@ export def resolve-ws-url [
 }
 
 def ws-url-from-version-info [target: any, info: record]: nothing -> oneof<string, error> {
-    let ws_url = ($info | get -o webSocketDebuggerUrl)
+    let ws_url = $info.webSocketDebuggerUrl?
 
     if $ws_url == null {
         error make { msg: $"No webSocketDebuggerUrl in ($target | into string)" }
@@ -193,14 +193,7 @@ def chromium-browser-candidates []: nothing -> list<string> {
 }
 
 def discover-browser-path []: nothing -> oneof<path, nothing> {
-    let env_candidate = (
-        [
-            (browser-env-candidate "NU_CDP_BROWSER")
-            (browser-env-candidate "BROWSER")
-        ]
-        | compact
-        | first
-    )
+    let env_candidate = (browser-env-candidate "NU_CDP_BROWSER" | default { browser-env-candidate "BROWSER" })
 
     if $env_candidate != null {
         return $env_candidate
@@ -352,38 +345,31 @@ export def "cdp browser stop" [
     --job-id(-j): int # Background job id to kill.
     --user-data-dir(-u): path # Profile directory to remove.
 ] : nothing -> nothing {
-    let browser_record = match ($browser | describe) {
-        $kind if ($kind | str starts-with "record") => $browser
-        _ => null
+    let session_name = if $session != null {
+        $session
+    } else {
+        match $browser {
+            {session: $browser_session} => $browser_session
+            $browser_text if (($browser_text | describe) == "string") => $browser_text
+            _ => "browser"
+        }
     }
-    let session_name = (
-        [
-            $session
-            ($browser_record | get -o session)
-            (if (($browser_record == null) and ($browser != null)) {
-                $browser | into string
-            })
-            "browser"
-        ]
-        | compact
-        | first
-    )
-    let job_to_kill = (
-        [
-            $job_id
-            ($browser_record | get -o jobId)
-        ]
-        | compact
-        | first
-    )
-    let profile_dir = (
-        [
-            $user_data_dir
-            ($browser_record | get -o userDataDir)
-        ]
-        | compact
-        | first
-    )
+    let job_to_kill = if $job_id != null {
+        $job_id
+    } else {
+        match $browser {
+            {jobId: $browser_job_id} => $browser_job_id
+            _ => null
+        }
+    }
+    let profile_dir = if $user_data_dir != null {
+        $user_data_dir
+    } else {
+        match $browser {
+            {userDataDir: $browser_user_data_dir} => $browser_user_data_dir
+            _ => null
+        }
+    }
 
     if $session_name != null {
         try { cdp call $session_name "Browser.close" | ignore }
