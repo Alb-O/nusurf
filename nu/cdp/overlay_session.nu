@@ -85,10 +85,26 @@ def merge-session-record [
     --project: string
     --profile: string
 ] : nothing -> record {
+    let browser = (current-browser-context)
+    let page = (current-page-context)
+    let preserve_existing_context = (($browser == null) and ($page == null) and ($previous != null))
+
     {
         name: $session_name
-        browser: (current-browser-context)
-        page: (current-page-context)
+        browser: (
+            if $preserve_existing_context {
+                $previous | get -o browser
+            } else {
+                $browser
+            }
+        )
+        page: (
+            if $preserve_existing_context {
+                $previous | get -o page
+            } else {
+                $page
+            }
+        )
         project: ($project | default ($previous | get -o project))
         profile: ($profile | default ($previous | get -o profile))
         updatedAt: (date now)

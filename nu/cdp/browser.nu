@@ -70,6 +70,20 @@ def open-or-reuse-browser-session [name: string, ws_url: string, raw_buffer: int
     }
 }
 
+def use-browser-context [browser_context: record]: nothing -> nothing {
+    let current_page = ($env | get -o CDP_PAGE)
+    let current_page_browser_session = ($current_page | get -o browserSession)
+
+    $env.CDP_BROWSER = $browser_context
+
+    if (
+        ($current_page != null)
+        and ($current_page_browser_session != $browser_context.session)
+    ) {
+        try { hide-env CDP_PAGE }
+    }
+}
+
 # Resolve an HTTP discovery target, websocket URL, or version record to a CDP websocket URL.
 export def resolve-ws-url [
     target: any # Browser port, discovery URL, websocket URL, or version record.
@@ -238,18 +252,31 @@ export def "cdp browser wait" [
 }
 
 # Wait for a browser target and open a stable websocket session to it.
-export def "cdp browser open" [
+export def --env "cdp browser open" [
     target: any = 9222 # Browser port, discovery URL, websocket URL, or version record.
     --name(-n): string = "browser" # Session name to register locally.
     --raw-buffer(-r): int = 128 # Number of raw websocket messages to retain for `ws recv`.
     --max-time(-m): duration = 10sec # Maximum time to wait for the browser target.
     --interval(-i): duration = 100ms # Delay between discovery attempts.
+    --use # Make the opened browser current via `cdp use`.
 ] : nothing -> oneof<record, error> {
-    open-or-reuse-browser-session $name (wait-for-ws-url $target $max_time $interval) $raw_buffer
+    let browser_session = (
+        open-or-reuse-browser-session $name (wait-for-ws-url $target $max_time $interval) $raw_buffer
+    )
+    let browser_context = {
+        session: $browser_session.id
+        url: $browser_session.url
+    }
+
+    if $use {
+        use-browser-context $browser_context
+    }
+
+    $browser_session
 }
 
 # Launch or attach to a browser and return a record agents can keep using.
-export def "cdp browser start" [
+export def --env "cdp browser start" [
     --browser(-b): string # Explicit browser path or command name to launch.
     --port(-p): int = 9222 # Remote debugging port to attach on.
     --name(-n): string = "browser" # Session name to register locally.
@@ -260,6 +287,7 @@ export def "cdp browser start" [
     --job-tag(-t): string # Background job tag for the launched browser process.
     --max-time(-m): duration = 10sec # Maximum time to wait for the browser target.
     --interval(-i): duration = 100ms # Delay between discovery attempts.
+    --use # Make the opened browser current via `cdp use`.
 ] : nothing -> oneof<record, error> {
     let existing_ws_url = (
         try { resolve-ws-url $port }
@@ -267,13 +295,18 @@ export def "cdp browser start" [
 
     if $existing_ws_url != null {
         let session = (open-or-reuse-browser-session $name $existing_ws_url $raw_buffer)
-
-        return {
+        let browser_context = {
             launched: false
             session: $session.id
             url: $session.url
             port: $port
         }
+
+        if $use {
+            use-browser-context $browser_context
+        }
+
+        return $browser_context
     }
 
     let browser_path = (cdp browser find --browser $browser)
@@ -294,7 +327,7 @@ export def "cdp browser start" [
     let ws_url = (wait-for-ws-url $port $max_time $interval)
     let session = (open-or-reuse-browser-session $name $ws_url $raw_buffer)
 
-    {
+    let browser_context = {
         launched: true
         browser: $browser_path
         session: $session.id
@@ -304,6 +337,12 @@ export def "cdp browser start" [
         jobTag: $launch_tag
         userDataDir: $profile_dir
     }
+
+    if $use {
+        use-browser-context $browser_context
+    }
+
+    $browser_context
 }
 
 # Close a started browser workflow record and clean up its local session state.

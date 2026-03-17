@@ -38,14 +38,16 @@ def main [] {
     assert equal ($cleared.browser.session) "browser-a"
     assert equal ($cleared.page.session) "page-a"
 
+    let updated = (cdp session save --profile "team-b")
+    assert equal $updated.profile "team-b"
+    assert equal $updated.project "g-p-demo"
+    assert equal $updated.browser.session "browser-a"
+    assert equal $updated.page.session "page-a"
+
     let reused = (cdp session use work)
     assert equal $reused.name "work"
     assert equal ($env.CDP_BROWSER.session) "browser-a"
     assert equal ($env.CDP_PAGE.session) "page-a"
-
-    let updated = (cdp session save --profile "team-b")
-    assert equal $updated.profile "team-b"
-    assert equal $updated.project "g-p-demo"
 
     let dropped = (cdp session drop)
     assert equal $dropped.name "work"

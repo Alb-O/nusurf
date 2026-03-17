@@ -514,12 +514,13 @@ export def --env "cdp use" [
 }
 
 # Create a page target, open a websocket session to it, and enable the common CDP domains.
-export def "cdp page new" [
+export def --env "cdp page new" [
     --browser(-b): any # Browser record or websocket session name; defaults to the current browser.
     --name(-n): string # Page websocket session name to register locally.
     --url(-u): string = "about:blank" # Initial URL to open in the new page target.
     --raw-buffer(-r): int = 128 # Number of raw websocket messages to retain for `ws recv`.
     --max-time(-m): duration = 30sec # Maximum time to wait for target creation and setup.
+    --use # Make the created page current via `cdp use`.
 ] : nothing -> oneof<record, error> {
     let browser_context = (resolve-browser-context $browser)
     let target = (
@@ -537,12 +538,18 @@ export def "cdp page new" [
     cdp call $page_session.id "Page.enable" --max-time $max_time | ignore
     cdp call $page_session.id "Runtime.enable" --max-time $max_time | ignore
 
-    {
+    let page_context = {
         browserSession: $browser_context.session
         session: $page_session.id
         targetId: $target.targetId
         webSocketDebuggerUrl: $page_session.url
     }
+
+    if $use {
+        cdp use $page_context | ignore
+    }
+
+    $page_context
 }
 
 # List the current browser's page targets, including any matching local page session names.

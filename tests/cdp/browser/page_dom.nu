@@ -230,9 +230,11 @@ def "test raw buffer defaults" [http_port: int] {
         try { cdp close $browser_open.id | ignore }
     }
 
-    let browser_start = (cdp browser start --port $http_port --name "browser-raw-start")
+    let browser_start = (cdp browser start --port $http_port --name "browser-raw-start" --use)
 
     try {
+        assert equal $env.CDP_BROWSER.session $browser_start.session
+
         cdp call $browser_start.session "Browser.getVersion" | ignore
 
         let raw_started = (ws recv $browser_start.session --max-time 2sec --full)
@@ -250,11 +252,12 @@ def "test raw buffer defaults" [http_port: int] {
     let browser_page = (cdp browser open $http_port --name "browser-raw-page")
 
     try {
-        cdp use $browser_page | ignore
-
-        let page = (cdp page new --name "page-raw-default")
+        let page = (cdp page new --browser $browser_page --name "page-raw-default" --use)
 
         try {
+            assert equal $env.CDP_BROWSER.session $browser_page.id
+            assert equal $env.CDP_PAGE.session $page.session
+
             cdp page eval "1 + 1" --page $page | ignore
 
             let raw_page = (ws recv $page.session --max-time 2sec --full)

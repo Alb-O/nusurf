@@ -2,18 +2,16 @@ use std/assert
 use cdp.nu *
 
 def main [http_port: int] {
-    let browser = (cdp browser open $http_port --name "browser-page-workflow")
+    let browser = (cdp browser open $http_port --name "browser-page-workflow" --use)
 
     try {
-        let context = (cdp use $browser)
-        assert equal $context.browser.session "browser-page-workflow"
-        assert (($context.page | describe) == "nothing")
+        assert equal $env.CDP_BROWSER.session "browser-page-workflow"
+        assert (($env | get -o CDP_PAGE | describe) == "nothing")
 
-        let page = (cdp page new --name "page-workflow")
-        let current = (cdp use $page)
+        let page = (cdp page new --name "page-workflow" --use)
 
-        assert equal $current.browser.session "browser-page-workflow"
-        assert equal $current.page.session "page-workflow"
+        assert equal $env.CDP_BROWSER.session "browser-page-workflow"
+        assert equal $env.CDP_PAGE.session "page-workflow"
         assert equal $env.CDP_PAGE.targetId $page.targetId
 
         let browser_again = (cdp use --browser $browser)
