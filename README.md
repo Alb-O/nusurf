@@ -1,6 +1,8 @@
 # nusurf
 
-A [Nushell](https://nushell.sh) plugin for WebSocket I/O, plus a Nu-first Chrome DevTools Protocol layer for browser automation and inspection. The plugin binary exposes the `ws` commands. The `cdp` commands come from the bundled Nushell module.
+A [Nushell](https://nushell.sh) plugin for WebSocket I/O and [Chrome DevTools Protocol](https://chromedevtools.github.io/devtools-protocol) interaction for fully Nu-driven browser control (no Playwright or other similar libs!)
+
+The plugin binary exposes the `ws` command. The `cdp` command come from the bundled Nushell module.
 
 ## Quickstart
 
@@ -53,9 +55,7 @@ To avoid ownership ambiguity, nusurf reserves these top-level keys in a saved co
 
 - `nusurf`: nusurf-owned data under `nusurf.browser` and `nusurf.page`
 - `user`: caller-owned metadata like `project` or `profile`
-- `ext`: extension/module-owned data under `ext.<namespace>`
-
-`project` and `profile` are not nusurf fields. They belong under `user` unless a module owns them under `ext.<namespace>`.
+- `plugin`: plugin-owned data under `plugin.<namespace>`
 
 The Home Manager module imports `cdp.nu`. Otherwise:
 
@@ -109,7 +109,7 @@ Example saved NUON:
       project: "demo"
       profile: "team-a"
     }
-    ext: {
+    plugin: {
       my_module: {
         cache_key: "demo"
       }
@@ -120,7 +120,7 @@ Example saved NUON:
 
 Saved context files are user-managed Nu data. Nusurf does not rewrite them.
 
-Edit `user` and `ext` freely. Leave `nusurf.browser` and `nusurf.page` to nusurf. `cdp context normalize` checks shape and ownership. It does not check whether browser/page records still point to live CDP sessions.
+Edit `user` freely. Treat `plugin` as plugin-owned data and `nusurf.browser` and `nusurf.page` as saved CDP connection data. `cdp context normalize` checks shape and ownership. It does not check whether browser/page records still point to live CDP sessions.
 
 Example update:
 
@@ -138,7 +138,7 @@ let contexts = (
         project: "demo"
         profile: "team-b"
       }
-      ext: ($contexts.work | get -o ext | default {})
+      plugin: ($contexts.work | get -o plugin | default {})
     }
 )
 

@@ -14,11 +14,11 @@ def main [] {
     }
 
     let captured = (cdp context capture)
-    assert equal ($captured | columns) [nusurf user ext]
+    assert equal ($captured | columns) [nusurf user plugin]
     assert equal $captured.nusurf.browser.session "browser-a"
     assert equal $captured.nusurf.page.session "page-a"
     assert equal $captured.user {}
-    assert equal $captured.ext {}
+    assert equal $captured.plugin {}
 
     let normalized = (
         cdp context normalize {
@@ -30,7 +30,7 @@ def main [] {
                 project: "demo"
                 profile: "team-a"
             }
-            ext: {
+            plugin: {
                 my_module: {
                     foo: "bar"
                 }
@@ -39,7 +39,7 @@ def main [] {
     )
     assert equal $normalized.user.project "demo"
     assert equal $normalized.user.profile "team-a"
-    assert equal $normalized.ext.my_module.foo "bar"
+    assert equal $normalized.plugin.my_module.foo "bar"
     assert equal $normalized.nusurf.browser.session "browser-a"
     assert equal $normalized.nusurf.page.session "page-a"
 
@@ -71,15 +71,15 @@ def main [] {
     )
     assert ($invalid_nusurf_key_error | str contains "Unsupported nusurf context keys")
 
-    let invalid_ext_error = (
+    let invalid_plugin_error = (
         try {
             cdp context normalize {
-                ext: "bad"
+                plugin: "bad"
             } | ignore
             ""
         } catch {|err|
             $err.msg
         }
     )
-    assert ($invalid_ext_error | str contains "extension context metadata")
+    assert ($invalid_plugin_error | str contains "plugin context metadata")
 }

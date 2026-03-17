@@ -1,4 +1,4 @@
-const reserved_context_keys = [nusurf user ext]
+const reserved_context_keys = [nusurf user plugin]
 const reserved_nusurf_keys = [browser page]
 
 def expect-record [value: any, label: string]: nothing -> record {
@@ -25,7 +25,7 @@ def expect-known-context-keys [context_record: record]: nothing -> record {
             msg: (
                 "Unsupported CDP context keys: "
                 + ($unknown_keys | str join ", ")
-                + ". Use `user` for caller-owned data and `ext.<namespace>` for module data."
+                + ". Use `user` for caller-owned data and `plugin.<namespace>` for plugin data."
             )
         }
     }
@@ -88,7 +88,7 @@ def normalize-context-record [context?: any]: nothing -> record {
     {
         nusurf: (normalize-nusurf-record ($context_record | get -o nusurf))
         user: (normalize-owned-record ($context_record | get -o user) "user context metadata")
-        ext: (normalize-owned-record ($context_record | get -o ext) "extension context metadata")
+        plugin: (normalize-owned-record ($context_record | get -o plugin) "plugin context metadata")
     }
 }
 
@@ -96,7 +96,7 @@ def normalize-context-record [context?: any]: nothing -> record {
 #
 # `nusurf.browser` and `nusurf.page` are nusurf-owned.
 # `user` is for caller-owned metadata.
-# `ext.<namespace>` is for module/plugin-owned metadata.
+# `plugin.<namespace>` is for plugin-owned metadata.
 export def "cdp context capture" []: nothing -> record {
     normalize-context-record {
         nusurf: {
