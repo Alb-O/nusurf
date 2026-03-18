@@ -270,6 +270,7 @@ Example:
 ```sh
 nu-with-nusurf -c 'help ws'
 nu-with-nusurf -c "use $env.NUSURF_CDP_MODULE; help cdp"
+devenv-run -C . --shell 'command -v nu-with-nusurf'
 ```
 
 ## Dev
