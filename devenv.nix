@@ -64,6 +64,7 @@ in
     echo "Run: show-cargo-manifest"
     echo "Run: cargo-check"
     echo "Run: cargo-build"
+    echo "Run: nu-with-nusurf"
   '';
 
   enterTest = ''

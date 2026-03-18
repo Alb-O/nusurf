@@ -243,6 +243,35 @@ in
 }
 ```
 
+## Devenv
+
+For local polyrepo development, `nusurf` is also exposed as a shared `devenv`
+import surface. The superproject's generated `devenv.local.yaml` now injects:
+
+```yaml
+inputs:
+  nusurf:
+    url: path:/agent/repos/nusurf
+    flake: false
+imports:
+  - nusurf/nushell-plugin
+```
+
+That import adds:
+
+- `nu_plugin_nusurf` to the shell packages
+- `nu` to the shell packages
+- `$NUSURF_PLUGIN` with the plugin binary path
+- `$NUSURF_CDP_MODULE` with the bundled `cdp` module path
+- `nu-with-nusurf` as a stable helper for local interactive use
+
+Example:
+
+```sh
+nu-with-nusurf -c 'help ws'
+nu-with-nusurf -c "use $env.NUSURF_CDP_MODULE; help cdp"
+```
+
 ## Dev
 
 ```sh
