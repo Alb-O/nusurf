@@ -207,9 +207,6 @@ ws close cdp
 
 A nix package and Home Manager module are included:
 
-Inside this polyrepo, the package defaults to the shared managed-Cargo catalog
-and merge script from `poly-rust-env`.
-
 Example Home Manager usage inside the polyrepo:
 
 ```nix
@@ -218,30 +215,32 @@ Example Home Manager usage inside the polyrepo:
     ./repos/nusurf/nix/home-manager.nix
   ];
 
-  programs.nusurf.enable = true;
+  programs.nusurf = {
+    enable = true;
+    managedCargoDir = ./repos/poly-rust-env/modules/managed-cargo;
+  };
 }
 ```
 
-Outside the polyrepo, construct the package explicitly and pass the managed
-Cargo inputs, then hand that package to the Home Manager module:
+Outside the polyrepo, pass the managed-Cargo path explicitly:
 
 ```nix
 let
   nusurfSrc = builtins.fetchTarball "https://github.com/Alb-O/nusurf/archive/main.tar.gz";
   polyRustEnvSrc = builtins.fetchTarball "https://github.com/Alb-O/poly-rust-env/archive/main.tar.gz";
-  nusurf = pkgs.callPackage "${nusurfSrc}/nix/package.nix" {
-    managedCargoDir = "${polyRustEnvSrc}/modules/managed-cargo";
-  };
 in
 {
   imports = [ "${nusurfSrc}/nix/home-manager.nix" ];
 
   programs.nusurf = {
     enable = true;
-    package = nusurf;
+    managedCargoDir = "${polyRustEnvSrc}/modules/managed-cargo";
   };
 }
 ```
+
+You can still pass `programs.nusurf.package` explicitly, but the module no
+longer assumes sibling repo checkouts exist.
 
 ## Devenv
 

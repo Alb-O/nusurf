@@ -7,16 +7,15 @@
 }:
 
 let
-  defaultManagedCargoDir = "${toString ../..}/poly-rust-env/modules/managed-cargo";
   resolvedManagedCargoDir =
     if managedCargoDir != null then
       managedCargoDir
-    else if builtins.pathExists defaultManagedCargoDir then
-      defaultManagedCargoDir
     else
       throw ''
         nusurf packaging requires poly-rust-env/modules/managed-cargo.
-        Pass `managedCargoDir` to `nix/package.nix`, or build from the polyrepo checkout.
+        Pass `managedCargoDir` to `nix/package.nix`.
+        Shared/local-input consumers should source it from an explicit
+        dependency such as `inputs.poly-rust-env`.
       '';
   resolvedCargoCatalogPath =
     if cargoCatalogPath != null then
