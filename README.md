@@ -6,12 +6,12 @@ The plugin binary exposes the `ws` command. The `cdp` command come from the bund
 
 ## Quickstart
 
-Browser and page commands use the selected `cdp use` context.
+Browser and page commands use the selected `cdp focus` context.
 
 ```bash
 # launch browser, set new page and navigate
-let browser = (cdp browser start --use)
-let page = (cdp page new --use)
+let browser = (cdp browser start --focus)
+let page = (cdp page new --focus)
 cdp page goto "https://example.com/login" --wait-for "form"
 
 # DOM interaction
@@ -28,7 +28,7 @@ cdp page close
 cdp browser stop $browser
 ```
 
-Page commands default to the page selected by `cdp use`. Browser-aware commands default to the selected browser. Pass `--page` or `--browser` for explicit routing.
+Page commands default to the page selected by `cdp focus`. Browser-aware commands default to the selected browser. Pass `--page` or `--browser` for explicit routing.
 
 `cdp page wait` and `cdp page query` return normalized element records:
 
@@ -57,17 +57,17 @@ To avoid ownership ambiguity, nusurf reserves these top-level keys in a saved co
 - `user`: caller-owned metadata like `project` or `profile`
 - `plugin`: plugin-owned data under `plugin.<namespace>`
 
-The Home Manager module imports `cdp.nu`. Otherwise:
+The Home Manager module imports `cdp`. Otherwise:
 
 ```nu
-use path/to/nu/cdp.nu *
+use path/to/nu/cdp
 ```
 
 Example:
 
 ```nu
-let browser = (cdp browser start --use)
-let page = (cdp page new --url "https://example.com" --use)
+let browser = (cdp browser start --focus)
+let page = (cdp page new --url "https://example.com" --focus)
 
 # context record
 let work = (
@@ -84,11 +84,11 @@ let contexts = {work: $work}
 $contexts | to nuon | save -f .nusurf-contexts.nuon
 
 # clear shell binding
-cdp use --clear
+cdp focus --clear
 
 # read NUON and apply binding
 let contexts = (open .nusurf-contexts.nuon | from nuon)
-cdp use --browser $contexts.work.nusurf.browser --page $contexts.work.nusurf.page
+cdp focus --browser $contexts.work.nusurf.browser --page $contexts.work.nusurf.page
 ```
 
 Example saved NUON:

@@ -1,5 +1,5 @@
 use std/assert
-use cdp.nu *
+use ../../../nu/cdp
 use cdp_live.nu *
 
 def capture-page-artifacts [http_port: int, target_id: string] {

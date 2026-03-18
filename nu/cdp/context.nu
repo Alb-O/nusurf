@@ -97,7 +97,7 @@ def normalize-context-record [context?: any]: nothing -> record {
 # `nusurf.browser` and `nusurf.page` are nusurf-owned.
 # `user` is for caller-owned metadata.
 # `plugin.<namespace>` is for plugin-owned metadata.
-export def "cdp context capture" []: nothing -> record {
+export def capture []: nothing -> record {
     normalize-context-record {
         nusurf: {
             browser: $env.CDP_BROWSER?
@@ -107,6 +107,6 @@ export def "cdp context capture" []: nothing -> record {
 }
 
 # Normalize and validate a saved CDP context record without changing it semantically.
-export def "cdp context normalize" [context: any]: nothing -> record {
+export def normalize [context: any]: nothing -> record {
     normalize-context-record $context
 }

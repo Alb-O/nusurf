@@ -1,4 +1,4 @@
-use ../../nu/cdp.nu *
+use ../../nu/cdp
 
 const suite_catalog_file = (path self ../suites.nuon)
 const include_paths_separator = (char --integer 30)

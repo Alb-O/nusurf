@@ -58,7 +58,7 @@ def resolve-session-id [session: any]: nothing -> oneof<string, error> {
 }
 
 # Open a websocket session to a browser or page target.
-export def "cdp open" [
+export def open [
     target: any # Browser port, discovery URL, websocket URL, or version record.
     --name(-n): string # Session name to register locally.
     --raw-buffer(-r): int = 0 # Number of raw websocket messages to retain for `ws recv`.
@@ -68,7 +68,7 @@ export def "cdp open" [
 }
 
 # Send a validated CDP command and await its response.
-export def "cdp call" [
+export def call [
     session: string@complete-cdp-session # Open websocket session name.
     method: string@complete-cdp-command # Qualified CDP command name.
     params?: any # Command params record.
@@ -114,7 +114,7 @@ export def "cdp call" [
 }
 
 # Read the next CDP event, optionally filtered by method or attached session.
-export def "cdp event" [
+export def event [
     session: string@complete-cdp-session # Open websocket session name.
     method?: string@complete-cdp-event # Qualified CDP event name to filter on.
     --session-id(-s): string # Attached target session id to filter on.
@@ -134,31 +134,31 @@ export def "cdp event" [
 }
 
 # Attach a browser session to a target and return the attached session metadata.
-export def "cdp attach" [
+export def attach [
     session: string@complete-cdp-session # Browser websocket session name.
     target: any # Target id or target record.
     --flatten(-f) = true # Request flattened session routing.
     --max-time(-m): duration = 30sec # Maximum time to wait for the attach result.
 ] : nothing -> oneof<any, error> {
-    cdp call $session "Target.attachToTarget" {
+    call $session "Target.attachToTarget" {
         targetId: (resolve-target-id $target)
         flatten: $flatten
     } --max-time $max_time
 }
 
 # Detach an attached target session from the browser session.
-export def "cdp detach" [
+export def detach [
     session: string@complete-cdp-session # Browser websocket session name.
     attached_session: any # Attached session id or attached session record.
     --max-time(-m): duration = 30sec # Maximum time to wait for the detach result.
 ] : nothing -> oneof<any, error> {
-    cdp call $session "Target.detachFromTarget" {
+    call $session "Target.detachFromTarget" {
         sessionId: (resolve-session-id $attached_session)
     } --max-time $max_time
 }
 
 # Close a websocket session by name.
-export def "cdp close" [
+export def close [
     session: string@complete-cdp-session # Open websocket session name.
 ] : nothing -> any {
     ws close $session

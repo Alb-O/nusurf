@@ -1,5 +1,5 @@
 use std/assert
-use cdp.nu *
+use ../../nu/cdp
 
 # Return whether a value is Nushell `nothing`.
 export def "is nothing" [

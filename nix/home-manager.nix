@@ -37,7 +37,7 @@ in
       plugins = [ cfg.package ];
       extraConfig = lib.mkIf cfg.importCdpModule (
         lib.mkAfter ''
-          use ${cfg.package}/share/nushell/nusurf/nu/cdp.nu *
+          use ${cfg.package}/share/nushell/nusurf/nu/cdp
         ''
       );
     };

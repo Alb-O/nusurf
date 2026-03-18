@@ -70,7 +70,7 @@ def open-or-reuse-browser-session [name: string, ws_url: string, raw_buffer: int
     }
 }
 
-def use-browser-context [browser_context: record]: nothing -> nothing {
+def focus-browser-context [browser_context: record]: nothing -> nothing {
     let current_page = $env.CDP_PAGE?
     let current_page_browser_session = $current_page.browserSession?
 
@@ -206,14 +206,14 @@ def discover-browser-path []: nothing -> oneof<path, nothing> {
 }
 
 # Resolve a CDP discovery target to its websocket URL.
-export def "cdp discover" [
+export def discover [
     target: any # Browser port, discovery URL, websocket URL, or version record.
 ] : nothing -> oneof<string, error> {
     resolve-ws-url $target
 }
 
 # Find a Chromium-compatible browser executable.
-export def "cdp browser find" [
+export def find [
     --browser(-b): string # Explicit browser path or command name to resolve.
 ] : nothing -> oneof<path, error> {
     let path = if $browser == null {
@@ -236,7 +236,7 @@ export def "cdp browser find" [
 }
 
 # Wait for a browser target to expose a DevTools websocket URL.
-export def "cdp browser wait" [
+export def wait [
     target: any = 9222 # Browser port, discovery URL, websocket URL, or version record.
     --max-time(-m): duration = 10sec # Maximum time to wait for the browser target.
     --interval(-i): duration = 100ms # Delay between discovery attempts.
@@ -245,13 +245,13 @@ export def "cdp browser wait" [
 }
 
 # Wait for a browser target and open a stable websocket session to it.
-export def --env "cdp browser open" [
+export def --env open [
     target: any = 9222 # Browser port, discovery URL, websocket URL, or version record.
     --name(-n): string = "browser" # Session name to register locally.
     --raw-buffer(-r): int = 128 # Number of raw websocket messages to retain for `ws recv`.
     --max-time(-m): duration = 10sec # Maximum time to wait for the browser target.
     --interval(-i): duration = 100ms # Delay between discovery attempts.
-    --use # Make the opened browser current via `cdp use`.
+    --focus # Make the opened browser current via `cdp focus`.
 ] : nothing -> oneof<record, error> {
     let browser_session = (
         open-or-reuse-browser-session $name (wait-for-ws-url $target $max_time $interval) $raw_buffer
@@ -261,15 +261,15 @@ export def --env "cdp browser open" [
         url: $browser_session.url
     }
 
-    if $use {
-        use-browser-context $browser_context
+    if $focus {
+        focus-browser-context $browser_context
     }
 
     $browser_session
 }
 
 # Launch or attach to a browser and return a record agents can keep using.
-export def --env "cdp browser start" [
+export def --env start [
     --browser(-b): string # Explicit browser path or command name to launch.
     --port(-p): int = 9222 # Remote debugging port to attach on.
     --name(-n): string = "browser" # Session name to register locally.
@@ -280,7 +280,7 @@ export def --env "cdp browser start" [
     --job-tag(-t): string # Background job tag for the launched browser process.
     --max-time(-m): duration = 10sec # Maximum time to wait for the browser target.
     --interval(-i): duration = 100ms # Delay between discovery attempts.
-    --use # Make the opened browser current via `cdp use`.
+    --focus # Make the opened browser current via `cdp focus`.
 ] : nothing -> oneof<record, error> {
     let existing_ws_url = (
         try { resolve-ws-url $port }
@@ -295,21 +295,21 @@ export def --env "cdp browser start" [
             port: $port
         }
 
-        if $use {
-            use-browser-context $browser_context
+        if $focus {
+            focus-browser-context $browser_context
         }
 
         return $browser_context
     }
 
-    let browser_path = (cdp browser find --browser $browser)
+    let browser_path = (find --browser $browser)
     let profile_dir = if $user_data_dir == null {
         mktemp -d
     } else {
         $user_data_dir | path expand
     }
     let args = (
-        cdp browser args --port $port --headless=$headless --user-data-dir $profile_dir --url $url
+        args --port $port --headless=$headless --user-data-dir $profile_dir --url $url
     )
     let launch_tag = ($job_tag | default $"cdp-browser-($port)")
     let job_id = (
@@ -331,15 +331,15 @@ export def --env "cdp browser start" [
         userDataDir: $profile_dir
     }
 
-    if $use {
-        use-browser-context $browser_context
+    if $focus {
+        focus-browser-context $browser_context
     }
 
     $browser_context
 }
 
 # Close a started browser workflow record and clean up its local session state.
-export def "cdp browser stop" [
+export def stop [
     browser?: any # Record returned by `cdp browser start`, or a session name.
     --session(-s): string # Explicit session name to close.
     --job-id(-j): int # Background job id to kill.
@@ -372,7 +372,13 @@ export def "cdp browser stop" [
     }
 
     if $session_name != null {
-        try { cdp call $session_name "Browser.close" | ignore }
+        let request_id = (random-id)
+        {
+            id: $request_id
+            method: "Browser.close"
+        } | ws send-json $session_name
+
+        try { ws await $session_name $request_id --max-time 5sec | ignore }
 
         try { ws close $session_name | ignore }
     }
@@ -387,7 +393,7 @@ export def "cdp browser stop" [
 }
 
 # Build Chromium launch args with remote debugging enabled.
-export def "cdp browser args" [
+export def args [
     --port(-p): int = 9222 # Remote debugging port to expose.
     --headless(-h) # Launch Chromium in headless mode.
     --user-data-dir(-u): path # Browser profile directory to use.

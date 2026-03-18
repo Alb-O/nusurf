@@ -75,7 +75,7 @@ rustPlatform.buildRustPackage {
   '';
 
   passthru = {
-    nushellModuleSubpath = "share/nushell/nusurf/nu/cdp.nu";
+    nushellModuleSubpath = "share/nushell/nusurf/nu/cdp";
   };
 
   meta = {

@@ -1,5 +1,5 @@
 use std/assert
-use cdp.nu *
+use ../../../nu/cdp
 use cdp_live.nu *
 
 def data-page-url [html: string] {
@@ -14,7 +14,7 @@ def with-page [
     let page = (cdp page new --browser $browser --name $name)
 
     try {
-        cdp use --browser $browser --page $page | ignore
+        cdp focus --browser $browser --page $page | ignore
         do $body $page
     } finally {
         try { cdp page close --page $page --browser $browser | ignore }
@@ -230,7 +230,7 @@ def "test raw buffer defaults" [http_port: int] {
         try { cdp close $browser_open.id | ignore }
     }
 
-    let browser_start = (cdp browser start --port $http_port --name "browser-raw-start" --use)
+    let browser_start = (cdp browser start --port $http_port --name "browser-raw-start" --focus)
 
     try {
         assert equal $env.CDP_BROWSER.session $browser_start.session
@@ -252,7 +252,7 @@ def "test raw buffer defaults" [http_port: int] {
     let browser_page = (cdp browser open $http_port --name "browser-raw-page")
 
     try {
-        let page = (cdp page new --browser $browser_page --name "page-raw-default" --use)
+        let page = (cdp page new --browser $browser_page --name "page-raw-default" --focus)
 
         try {
             assert equal $env.CDP_BROWSER.session $browser_page.id
@@ -291,7 +291,7 @@ def main [http_port: int] {
     let browser = (cdp browser open $http_port --name "browser-page-dom")
 
     try {
-        cdp use $browser | ignore
+        cdp focus $browser | ignore
 
         test page goto wait-for and query $browser
         test page wait states $browser

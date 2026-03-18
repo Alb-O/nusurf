@@ -1,9 +1,5 @@
 use common.nu [completion-token random-id]
-use session.nu [
-    "cdp call"
-    "cdp close"
-    "cdp open"
-]
+use session.nu
 
 def ws-session-record [session_name: string]: nothing -> oneof<record, error> {
     let session = (ws list | where id == $session_name | first)
@@ -64,7 +60,7 @@ def resolve-browser-context [browser?: any]: nothing -> oneof<record, error> {
 
     if $source == null {
         error make {
-            msg: "No current browser is selected. Pass --browser or run `cdp use <browser>` first."
+            msg: "No current browser is selected. Pass --browser or run `cdp focus <browser>` first."
         }
     }
 
@@ -89,7 +85,7 @@ def resolve-page-context [page?: any, browser?: any]: nothing -> oneof<record, e
 
     if $source == null {
         error make {
-            msg: "No current page is selected. Pass --page or run `cdp use <page>` first."
+            msg: "No current page is selected. Pass --page or run `cdp focus <page>` first."
         }
     }
 
@@ -256,7 +252,7 @@ def inspect-page-elements [
     --page(-p): any
     --max-time(-m): duration = 30sec
 ] : nothing -> any {
-    cdp page eval (dom-helper-expression $selector $text) --page $page --max-time $max_time
+    eval (dom-helper-expression $selector $text) --page $page --max-time $max_time
 }
 
 def act-on-page-element [
@@ -266,7 +262,7 @@ def act-on-page-element [
     --page(-p): any
     --max-time(-m): duration = 30sec
 ] : nothing -> any {
-    cdp page eval (dom-helper-expression $selector null $action $value) --page $page --max-time $max_time
+    eval (dom-helper-expression $selector null $action $value) --page $page --max-time $max_time
 }
 
 def run-page-action [
@@ -396,7 +392,11 @@ export def complete-cdp-page-wait-state [
 }
 
 # Set the current browser and/or page context for agent-friendly CDP commands.
-export def --env "cdp use" [
+#
+# This is named `focus` instead of `use` because Nushell 0.111 has a parser
+# edge case around modules that define a `use` command while also importing
+# sibling modules, which breaks the `cdp/` directory-module layout.
+export def --env focus [
     context?: any # Browser/page record or websocket session name to make current.
     --browser(-b): any # Explicit browser record or websocket session name to make current.
     --page(-p): any # Explicit page record or websocket session name to make current.
@@ -457,29 +457,29 @@ export def --env "cdp use" [
 }
 
 # Create a page target, open a websocket session to it, and enable the common CDP domains.
-export def --env "cdp page new" [
+export def --env new [
     --browser(-b): any # Browser record or websocket session name; defaults to the current browser.
     --name(-n): string # Page websocket session name to register locally.
     --url(-u): string = "about:blank" # Initial URL to open in the new page target.
     --raw-buffer(-r): int = 128 # Number of raw websocket messages to retain for `ws recv`.
     --max-time(-m): duration = 30sec # Maximum time to wait for target creation and setup.
-    --use # Make the created page current via `cdp use`.
+    --focus # Make the created page current via `cdp focus`.
 ] : nothing -> oneof<record, error> {
     let browser_context = (resolve-browser-context $browser)
     let target = (
-        cdp call $browser_context.session "Target.createTarget" {
+        session call $browser_context.session "Target.createTarget" {
             url: $url
         } --max-time $max_time
     )
     let page_session_name = ($name | default $"page-((random-id))")
     let page_session = (
-        cdp open (page-ws-url $browser_context.session $target.targetId) --name $page_session_name --raw-buffer (
+        session open (page-ws-url $browser_context.session $target.targetId) --name $page_session_name --raw-buffer (
             $raw_buffer
         )
     )
 
-    cdp call $page_session.id "Page.enable" --max-time $max_time | ignore
-    cdp call $page_session.id "Runtime.enable" --max-time $max_time | ignore
+    session call $page_session.id "Page.enable" --max-time $max_time | ignore
+    session call $page_session.id "Runtime.enable" --max-time $max_time | ignore
 
     let page_context = {
         browserSession: $browser_context.session
@@ -488,21 +488,21 @@ export def --env "cdp page new" [
         webSocketDebuggerUrl: $page_session.url
     }
 
-    if $use {
-        cdp use $page_context | ignore
+    if $focus {
+        focus $page_context | ignore
     }
 
     $page_context
 }
 
 # List the current browser's page targets, including any matching local page session names.
-export def "cdp page list" [
+export def list [
     --browser(-b): any # Browser record or websocket session name; defaults to the current browser.
 ] : nothing -> oneof<list<any>, error> {
     let browser_context = (resolve-browser-context $browser)
     let current_target_id = $env.CDP_PAGE?.targetId?
     let sessions = (ws list)
-    let targets = (cdp call $browser_context.session "Target.getTargets" | get targetInfos)
+    let targets = (session call $browser_context.session "Target.getTargets" | get targetInfos)
 
     $targets
     | where type == "page"
@@ -520,7 +520,7 @@ export def "cdp page list" [
 }
 
 # Close a page target and its websocket session, defaulting to the current page context.
-export def --env "cdp page close" [
+export def --env close [
     --page(-p): any # Page record or websocket session name; defaults to the current page.
     --browser(-b): any # Browser record or websocket session name; defaults to the current browser.
     --max-time(-m): duration = 30sec # Maximum time to wait for the target close command.
@@ -539,11 +539,11 @@ export def --env "cdp page close" [
         }
     }
 
-    cdp call $page_context.browserSession "Target.closeTarget" {
+    session call $page_context.browserSession "Target.closeTarget" {
         targetId: $page_context.targetId
     } --max-time $max_time | ignore
 
-    try { cdp close $page_context.session | ignore }
+    try { session close $page_context.session | ignore }
 
     if ($env.CDP_PAGE?.session? == $page_context.session) {
         try { hide-env CDP_PAGE }
@@ -553,7 +553,7 @@ export def --env "cdp page close" [
 }
 
 # Navigate a page to a URL, defaulting to the current page context.
-export def "cdp page goto" [
+export def goto [
     url: string # URL to navigate the page to.
     --page(-p): any # Page record or websocket session name; defaults to the current page.
     --max-time(-m): duration = 30sec # Maximum time to wait for navigation and load.
@@ -571,13 +571,13 @@ export def "cdp page goto" [
 
     let page_context = (resolve-page-context $page)
     let navigation = (
-        cdp call $page_context.session "Page.navigate" {
+        session call $page_context.session "Page.navigate" {
             url: $url
         } --max-time $max_time
     )
 
     if (not $no_wait) {
-        cdp event $page_context.session "Page.loadEventFired" --max-time $max_time | ignore
+        session event $page_context.session "Page.loadEventFired" --max-time $max_time | ignore
     }
 
     if $wait_for != null {
@@ -589,7 +589,7 @@ export def "cdp page goto" [
 }
 
 # Wait for a page selector to reach a target state.
-export def "cdp page wait" [
+export def wait [
     selector: string # CSS selector to wait for.
     --state: string@complete-cdp-page-wait-state = "present" # Wait condition: present, visible, hidden, or gone.
     --text: string # Optional text substring that matching elements must contain.
@@ -601,7 +601,7 @@ export def "cdp page wait" [
 }
 
 # Query page elements and return the first match or all matches.
-export def "cdp page query" [
+export def query [
     selector: string # CSS selector to inspect.
     --all # Return every match instead of only the first match.
     --page(-p): any # Page record or websocket session name; defaults to the current page.
@@ -617,7 +617,7 @@ export def "cdp page query" [
 }
 
 # Click the first matching page element after it appears.
-export def "cdp page click" [
+export def click [
     selector: string # CSS selector to click.
     --max-time(-m): duration = 30sec # Maximum time to wait for the element to appear.
     --interval(-i): duration = 100ms # Delay between selector checks.
@@ -627,7 +627,7 @@ export def "cdp page click" [
 }
 
 # Fill the first matching page element after it appears.
-export def "cdp page fill" [
+export def fill [
     selector: string # CSS selector to fill.
     value: string # New value to assign to the element.
     --max-time(-m): duration = 30sec # Maximum time to wait for the element to appear.
@@ -638,7 +638,7 @@ export def "cdp page fill" [
 }
 
 # Evaluate JavaScript in a page, defaulting to the current page context.
-export def "cdp page eval" [
+export def eval [
     expression: string # JavaScript expression to evaluate in the page.
     --page(-p): any # Page record or websocket session name; defaults to the current page.
     --await-promise(-a) = true # Await promise results before returning.
@@ -647,7 +647,7 @@ export def "cdp page eval" [
 ] : nothing -> oneof<any, error> {
     let page_context = (resolve-page-context $page)
     let evaluation = (
-        cdp call $page_context.session "Runtime.evaluate" {
+        session call $page_context.session "Runtime.evaluate" {
             expression: $expression
             returnByValue: (not $full)
             awaitPromise: $await_promise

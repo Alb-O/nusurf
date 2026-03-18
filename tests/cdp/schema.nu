@@ -1,7 +1,7 @@
 use std/assert
-use cdp.nu *
-use cdp/page.nu [complete-cdp-page-wait-state]
-use cdp/schema.nu [
+use ../../nu/cdp
+use ../../nu/cdp/page.nu [complete-cdp-page-wait-state]
+use ../../nu/cdp/schema.nu [
     complete-cdp-command
     complete-cdp-domain
     complete-cdp-event

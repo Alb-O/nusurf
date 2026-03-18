@@ -265,7 +265,7 @@ export def validate-event-input [
 }
 
 # List protocol domains with command, event, and type counts.
-export def "cdp schema domains" []: nothing -> list<any> {
+export def domains []: nothing -> list<any> {
     schema-domains
     | each {|domain_record|
         $domain_record
@@ -276,49 +276,49 @@ export def "cdp schema domains" []: nothing -> list<any> {
 }
 
 # List protocol commands, optionally filtered by domain.
-export def "cdp schema commands" [
+export def commands [
     domain?: string@complete-cdp-domain # Domain name to filter on.
 ] : nothing -> oneof<list<any>, error> {
     schema-commands $domain
 }
 
 # List protocol events, optionally filtered by domain.
-export def "cdp schema events" [
+export def events [
     domain?: string@complete-cdp-domain # Domain name to filter on.
 ] : nothing -> oneof<list<any>, error> {
     schema-events $domain
 }
 
 # List protocol types, optionally filtered by domain.
-export def "cdp schema types" [
+export def types [
     domain?: string@complete-cdp-domain # Domain name to filter on.
 ] : nothing -> oneof<list<any>, error> {
     schema-types $domain
 }
 
 # Show one protocol command by qualified name.
-export def "cdp schema command" [
+export def command [
     qualified: string@complete-cdp-command # Qualified CDP command name.
 ] : nothing -> oneof<record, error> {
     schema-lookup "command" $qualified
 }
 
 # Show one protocol event by qualified name.
-export def "cdp schema event" [
+export def event [
     qualified: string@complete-cdp-event # Qualified CDP event name.
 ] : nothing -> oneof<record, error> {
     schema-lookup "event" $qualified
 }
 
 # Show one protocol type by qualified name.
-export def "cdp schema type" [
+export def type [
     qualified: string@complete-cdp-type # Qualified CDP type name.
 ] : nothing -> oneof<record, error> {
     schema-lookup "type" $qualified
 }
 
 # Search commands, events, and types with one query string.
-export def "cdp schema search" [
+export def search [
     query: string # Search text to match against qualified names and descriptions.
 ] : nothing -> oneof<list<any>, error> {
     [
@@ -330,21 +330,21 @@ export def "cdp schema search" [
 }
 
 # Search only protocol commands with one query string.
-export def "cdp schema search commands" [
+export def "search commands" [
     query: string@complete-cdp-command # Search text to match against qualified names and descriptions.
 ] : nothing -> oneof<list<any>, error> {
     search-results "command" $query
 }
 
 # Search only protocol events with one query string.
-export def "cdp schema search events" [
+export def "search events" [
     query: string@complete-cdp-event # Search text to match against qualified names and descriptions.
 ] : nothing -> oneof<list<any>, error> {
     search-results "event" $query
 }
 
 # Search only protocol types with one query string.
-export def "cdp schema search types" [
+export def "search types" [
     query: string@complete-cdp-type # Search text to match against qualified names and descriptions.
 ] : nothing -> oneof<list<any>, error> {
     search-results "type" $query

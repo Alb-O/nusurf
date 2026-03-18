@@ -1,20 +1,20 @@
 use std/assert
-use cdp.nu *
+use ../../../nu/cdp
 
 def main [http_port: int] {
-    let browser = (cdp browser open $http_port --name "browser-page-workflow" --use)
+    let browser = (cdp browser open $http_port --name "browser-page-workflow" --focus)
 
     try {
         assert equal $env.CDP_BROWSER.session "browser-page-workflow"
         assert (($env | get -o CDP_PAGE | describe) == "nothing")
 
-        let page = (cdp page new --name "page-workflow" --use)
+        let page = (cdp page new --name "page-workflow" --focus)
 
         assert equal $env.CDP_BROWSER.session "browser-page-workflow"
         assert equal $env.CDP_PAGE.session "page-workflow"
         assert equal $env.CDP_PAGE.targetId $page.targetId
 
-        let browser_again = (cdp use --browser $browser)
+        let browser_again = (cdp focus --browser $browser)
         assert equal $browser_again.browser.session "browser-page-workflow"
         assert equal $browser_again.page.session "page-workflow"
         assert equal $env.CDP_PAGE.session "page-workflow"
@@ -44,7 +44,7 @@ def main [http_port: int] {
         let remaining = (cdp page list | where targetId == $page.targetId | length)
         assert equal $remaining 0
 
-        let browser_only = (cdp use $browser)
+        let browser_only = (cdp focus $browser)
         assert equal $browser_only.browser.session "browser-page-workflow"
         assert (($browser_only.page | describe) == "nothing")
     } finally {

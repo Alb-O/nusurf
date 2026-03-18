@@ -1,6 +1,6 @@
 use std/assert
-use cdp.nu *
-use cdp/session.nu [complete-cdp-session]
+use ../../nu/cdp
+use ../../nu/cdp/session.nu [complete-cdp-session]
 
 def main [http_port: int, expected_ws_url: string] {
     test cdp discover $http_port $expected_ws_url

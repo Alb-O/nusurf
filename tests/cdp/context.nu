@@ -1,5 +1,5 @@
 use std/assert
-use cdp.nu *
+use ../../nu/cdp
 
 def main [] {
     $env.CDP_BROWSER = {

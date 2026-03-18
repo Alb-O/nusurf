@@ -1,5 +1,5 @@
 use std/assert
-use cdp.nu *
+use ../../../nu/cdp
 use cdp_live.nu *
 
 def main [http_port: int] {
