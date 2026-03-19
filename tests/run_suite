@@ -4,13 +4,16 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 nu_script="$script_dir/run_suite.nu"
-plugin_path="$repo_root/target/debug/nu_plugin_nusurf"
+plugin_path="${NUSURF_PLUGIN:-$repo_root/../nu_session/target/debug/nu_plugin_nusurf}"
+fixture_binary="${NUSURF_FIXTURE_BINARY:-$repo_root/../nu_session/target/debug/nusurf_live_fixture_server}"
 
 if command -v nu >/dev/null 2>&1; then
   exec nu \
     --no-config-file \
     --plugins "$plugin_path" \
     -- "$nu_script" \
+    --plugin "$plugin_path" \
+    --fixture-binary "$fixture_binary" \
     "$@"
 fi
 
@@ -20,4 +23,6 @@ exec nix --extra-experimental-features 'nix-command flakes' \
     --no-config-file \
     --plugins "$plugin_path" \
     -- "$nu_script" \
+    --plugin "$plugin_path" \
+    --fixture-binary "$fixture_binary" \
     "$@"

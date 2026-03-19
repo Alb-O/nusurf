@@ -19,6 +19,7 @@ in
 
   env = {
     NUSURF_PLUGIN = lib.getExe nusurfPackage;
+    NUSURF_FIXTURE_BINARY = "${nusurfPackage}/bin/nusurf_live_fixture_server";
     NUSURF_NU_LIB_DIR = "${nusurfPackage}/share/nushell/nusurf/nu";
     NUSURF_CDP_MODULE = "${nusurfPackage}/share/nushell/nusurf/nu/cdp";
   };

@@ -277,15 +277,13 @@ devenv-run -C . --shell 'command -v nu-with-nusurf'
 ```sh
 update-cdp-schema # refresh bundled CDP schema
 
-# run the Rust test suite
-cargo test --test integration_tests --all-features
+# build and test the Rust/plugin side from nu_session
+devenv-run -C ../nu_session cargo test --workspace --package nu_session_protocol_cdp
 
 # run the mock-driven Nu coverage
-cargo build --bin nu_plugin_nusurf --bin nusurf_live_fixture_server --all-features
 ./tests/run_suite mock_all
 
 # run the live browser suites
-cargo build --bin nu_plugin_nusurf --bin nusurf_live_fixture_server --all-features
 ./tests/run_suite browser_all
 ```
 

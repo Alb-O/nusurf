@@ -40,8 +40,9 @@ in
       );
       default = null;
       description = ''
-        Path to `ar_devenv_rust/modules/managed-cargo` used to build the bundled
-        Nusurf package when `programs.nusurf.package` is not set.
+        Path to `ar_devenv_rust/modules/managed-cargo` used to build the
+        bundled `nu_session` plugin package when `programs.nusurf.package`
+        is not set.
       '';
     };
 
@@ -60,8 +61,8 @@ in
         assertion = resolvedPackage != null;
         message = ''
           programs.nusurf.enable requires either programs.nusurf.package or
-          programs.nusurf.managedCargoDir so the plugin package can be built
-          without sibling-repo path assumptions.
+          programs.nusurf.managedCargoDir so the bundled plugin package can be
+          built from nu_session without sibling-repo Cargo path wiring.
         '';
       }
     ];

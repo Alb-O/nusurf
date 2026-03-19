@@ -2,8 +2,8 @@ use support/suite_runner.nu [run-test-suite]
 
 def main [
     suite: string = "mock_all" # Suite name from tests/suites.nuon.
-    --plugin(-p): string = "target/debug/nu_plugin_nusurf" # Plugin binary path to load in child Nu processes.
-    --fixture-binary(-f): string = "target/debug/nusurf_live_fixture_server" # Fixture server binary for mock and live-browser suites.
+    --plugin(-p): string = "../nu_session/target/debug/nu_plugin_nusurf" # Plugin binary path to load in child Nu processes.
+    --fixture-binary(-f): string = "../nu_session/target/debug/nusurf_live_fixture_server" # Fixture server binary for mock and live-browser suites.
     --browser(-b): string # Explicit Chromium-compatible browser path or command name for live-browser suites.
     --port: int # Remote debugging port to launch on for live-browser suites.
     --max-time(-m): duration = 20sec # Maximum time to wait for browser startup.
