@@ -4,6 +4,17 @@ A [Nushell](https://nushell.sh) plugin for WebSocket I/O and [Chrome DevTools Pr
 
 The plugin binary exposes the `ws` command. The `cdp` command come from the bundled Nushell module.
 
+## Repo Boundary
+
+`nusurf` now owns the Nu-facing product surface:
+
+- bundled `cdp` Nu modules
+- CDP schema assets
+- end-to-end test suites
+- Nix/Home Manager wrappers
+
+The Rust plugin binaries themselves are built from `nu_session`, specifically `nu_session_protocol_cdp`. This repo wraps those binaries for packaging and local development instead of compiling its own Cargo package.
+
 ## Quickstart
 
 Browser and page commands use the selected `cdp focus` context.

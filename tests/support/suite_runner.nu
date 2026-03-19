@@ -444,7 +444,17 @@ def run-live-browser-suite [
         $run_results = (run-suite-scripts $repo_root $suite_run $plugin_path $script_context $verbose)
     } finally {
         stop-fixture-server $fixture_server
-        cdp browser stop $browser_workflow
+        try {
+            cdp browser stop $browser_workflow
+        } catch {|err|
+            let message = ($err.msg? | default ($err.rendered? | default ""))
+
+            if ($message | str contains "was not found") {
+                null
+            } else {
+                error make $err
+            }
+        }
     }
 
     $run_results
