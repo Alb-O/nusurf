@@ -4,9 +4,25 @@
   rustPlatform ? pkgs.rustPlatform,
   managedCargoDir ? null,
   cargoCatalogPath ? null,
+  nuSessionSource ? null,
 }:
 
 let
+  coercePath =
+    pathLike:
+    let
+      valueType = builtins.typeOf pathLike;
+    in
+    if valueType == "path" then
+      pathLike
+    else if valueType == "set" && pathLike ? outPath then
+      coercePath pathLike.outPath
+    else if valueType == "string" && lib.hasPrefix builtins.storeDir pathLike then
+      /. + builtins.unsafeDiscardStringContext (lib.removePrefix "/" pathLike)
+    else if valueType == "string" && lib.hasPrefix "/" pathLike then
+      /. + lib.removePrefix "/" pathLike
+    else
+      throw "nusurf packaging expected an absolute path for nuSessionSource";
   resolvedManagedCargoDir =
     if managedCargoDir != null then
       managedCargoDir
@@ -22,6 +38,16 @@ let
       cargoCatalogPath
     else
       "${resolvedManagedCargoDir}/Cargo.catalog.toml";
+  resolvedNuSessionSource =
+    if nuSessionSource != null then coercePath nuSessionSource else ../../nu_session;
+  packagedNuSessionSource = lib.fileset.toSource {
+    root = resolvedNuSessionSource;
+    fileset = lib.fileset.unions [
+      (resolvedNuSessionSource + /Cargo.toml)
+      (resolvedNuSessionSource + /Cargo.poly.toml)
+      (resolvedNuSessionSource + /crates)
+    ];
+  };
   packageFiles = lib.fileset.toSource {
     root = ../.;
     fileset = lib.fileset.unions [
@@ -40,16 +66,34 @@ let
     sourcePath = packageFiles;
     derivationNamePrefix = "nusurf";
   };
+  compositeSource = pkgs.runCommand "nusurf-source-tree" { } ''
+    mkdir -p "$out/source/nusurf" "$out/source/nu_session"
+    cp -r ${managedCargoOutputs.cargoSourceTree}/. "$out/source/nusurf/"
+    cp -r ${packagedNuSessionSource}/. "$out/source/nu_session/"
+    chmod -R u+w "$out/source/nusurf" "$out/source/nu_session"
+  '';
 in
 rustPlatform.buildRustPackage {
   pname = "nu_plugin_nusurf";
   version = "1.0.6";
 
-  src = managedCargoOutputs.cargoSourceTree;
-  cargoLock.lockFile = ../Cargo.lock;
+  src = compositeSource;
+  unpackPhase = ''
+    runHook preUnpack
+    cp -r "$src"/source/nusurf ./nusurf
+    cp -r "$src"/source/nu_session ./nu_session
+    chmod -R u+w nusurf nu_session
+    runHook postUnpack
+  '';
+  cargoRoot = "nusurf";
+  buildAndTestSubdir = "nusurf";
+  cargoHash = "sha256-iqQOMl6fKTHs5whSkUdvmiBROFRoV+jwE7W4bkk5fxU=";
 
   nativeBuildInputs = [ pkgs.pkg-config ];
   buildInputs = [ pkgs.openssl ];
+  postPatch = ''
+    cp nusurf/Cargo.lock "$cargoDepsCopy/Cargo.lock"
+  '';
 
   cargoBuildFlags = [
     "--bin"

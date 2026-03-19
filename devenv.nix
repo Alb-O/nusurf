@@ -2,19 +2,63 @@
   pkgs,
   config,
   lib,
+  inputs,
   ...
 }:
 
 let
   standaloneProjectRoot = toString ./.;
+  coercePath =
+    pathLike:
+    let
+      valueType = builtins.typeOf pathLike;
+    in
+    if valueType == "path" then
+      pathLike
+    else if valueType == "set" && pathLike ? outPath then
+      coercePath pathLike.outPath
+    else if valueType == "string" && lib.hasPrefix builtins.storeDir pathLike then
+      /. + builtins.unsafeDiscardStringContext (lib.removePrefix "/" pathLike)
+    else if valueType == "string" && lib.hasPrefix "/" pathLike then
+      /. + lib.removePrefix "/" pathLike
+    else
+      throw "nusurf devenv expected an absolute path for inputs.nu_session";
+  resolvedNuSessionSource =
+    if inputs ? nu_session then coercePath inputs.nu_session else ../nu_session;
+  nuSessionSource = lib.fileset.toSource {
+    root = resolvedNuSessionSource;
+    fileset = lib.fileset.unions [
+      (resolvedNuSessionSource + /Cargo.toml)
+      (resolvedNuSessionSource + /Cargo.poly.toml)
+      (resolvedNuSessionSource + /crates)
+    ];
+  };
+  compositeSource = pkgs.runCommand "nusurf-devenv-source-tree" { } ''
+    mkdir -p "$out/source/nusurf" "$out/source/nu_session"
+    cp -r ${config.outputs.cargo_source_tree}/. "$out/source/nusurf/"
+    cp -r ${nuSessionSource}/. "$out/source/nu_session/"
+    chmod -R u+w "$out/source/nusurf" "$out/source/nu_session"
+  '';
   nusurf = pkgs.rustPlatform.buildRustPackage {
     pname = config.rustEnv.package.name;
     version = config.rustEnv.package.version;
-    src = config.outputs.cargo_source_tree;
-    cargoLock.lockFile = ./Cargo.lock;
+    src = compositeSource;
+    unpackPhase = ''
+      runHook preUnpack
+      cp -r "$src"/source/nusurf ./nusurf
+      cp -r "$src"/source/nu_session ./nu_session
+      chmod -R u+w nusurf nu_session
+      runHook postUnpack
+    '';
+    cargoRoot = "nusurf";
+    buildAndTestSubdir = "nusurf";
+    cargoHash = "sha256-iqQOMl6fKTHs5whSkUdvmiBROFRoV+jwE7W4bkk5fxU=";
     nativeBuildInputs = [ pkgs.pkg-config ];
     buildInputs = [ pkgs.openssl ];
     doCheck = false;
+    postPatch = ''
+      cp nusurf/Cargo.lock "$cargoDepsCopy/Cargo.lock"
+    '';
   };
 in
 {

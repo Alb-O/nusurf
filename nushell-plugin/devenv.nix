@@ -8,6 +8,7 @@
 let
   nusurfPackage = pkgs.callPackage ../nix/package.nix {
     managedCargoDir = "${inputs.poly-rust-env}/modules/managed-cargo";
+    nuSessionSource = inputs.nu_session;
   };
 in
 {
