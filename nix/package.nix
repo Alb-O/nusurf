@@ -40,14 +40,7 @@ let
       "${resolvedManagedCargoDir}/Cargo.catalog.toml";
   resolvedNuSessionSource =
     if nuSessionSource != null then coercePath nuSessionSource else ../../nu_session;
-  packagedNuSessionSource = lib.fileset.toSource {
-    root = resolvedNuSessionSource;
-    fileset = lib.fileset.unions [
-      (resolvedNuSessionSource + /Cargo.toml)
-      (resolvedNuSessionSource + /Cargo.poly.toml)
-      (resolvedNuSessionSource + /crates)
-    ];
-  };
+  nuSessionCargoManifest = builtins.readFile (resolvedNuSessionSource + /Cargo.toml);
   packageFiles = lib.fileset.toSource {
     root = ../.;
     fileset = lib.fileset.unions [
@@ -67,10 +60,14 @@ let
     derivationNamePrefix = "nusurf";
   };
   compositeSource = pkgs.runCommand "nusurf-source-tree" { } ''
-    mkdir -p "$out/source/nusurf" "$out/source/nu_session"
-    cp -r ${managedCargoOutputs.cargoSourceTree}/. "$out/source/nusurf/"
-    cp -r ${packagedNuSessionSource}/. "$out/source/nu_session/"
-    chmod -R u+w "$out/source/nusurf" "$out/source/nu_session"
+        mkdir -p "$out/source/nusurf" "$out/source/nu_session"
+        cp -r ${managedCargoOutputs.cargoSourceTree}/. "$out/source/nusurf/"
+        cp -r ${resolvedNuSessionSource}/crates "$out/source/nu_session/"
+        cp ${resolvedNuSessionSource}/Cargo.poly.toml "$out/source/nu_session/Cargo.poly.toml"
+        cat > "$out/source/nu_session/Cargo.toml" <<'EOF'
+    ${nuSessionCargoManifest}
+    EOF
+        chmod -R u+w "$out/source/nusurf" "$out/source/nu_session"
   '';
 in
 rustPlatform.buildRustPackage {

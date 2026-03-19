@@ -1373,6 +1373,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "nu_session_core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "nu_session_protocol"
+version = "0.1.0"
+dependencies = [
+ "nu_session_core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "nu_session_protocol_cdp"
+version = "0.1.0"
+dependencies = [
+ "nu-plugin",
+ "nu-protocol",
+ "nu_session_core",
+ "nu_session_protocol",
+ "serde_json",
+ "tracing",
+ "tracing-subscriber",
+ "tungstenite",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1414,6 +1444,7 @@ dependencies = [
  "nu-plugin-test-support",
  "nu-protocol",
  "nu-test-support",
+ "nu_session_protocol_cdp",
  "serde_json",
  "tracing",
  "tracing-subscriber",

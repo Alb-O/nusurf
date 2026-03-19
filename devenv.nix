@@ -25,19 +25,16 @@ let
       throw "nusurf devenv expected an absolute path for inputs.nu_session";
   resolvedNuSessionSource =
     if inputs ? nu_session then coercePath inputs.nu_session else ../nu_session;
-  nuSessionSource = lib.fileset.toSource {
-    root = resolvedNuSessionSource;
-    fileset = lib.fileset.unions [
-      (resolvedNuSessionSource + /Cargo.toml)
-      (resolvedNuSessionSource + /Cargo.poly.toml)
-      (resolvedNuSessionSource + /crates)
-    ];
-  };
+  nuSessionCargoManifest = builtins.readFile (resolvedNuSessionSource + /Cargo.toml);
   compositeSource = pkgs.runCommand "nusurf-devenv-source-tree" { } ''
-    mkdir -p "$out/source/nusurf" "$out/source/nu_session"
-    cp -r ${config.outputs.cargo_source_tree}/. "$out/source/nusurf/"
-    cp -r ${nuSessionSource}/. "$out/source/nu_session/"
-    chmod -R u+w "$out/source/nusurf" "$out/source/nu_session"
+        mkdir -p "$out/source/nusurf" "$out/source/nu_session"
+        cp -r ${config.outputs.cargo_source_tree}/. "$out/source/nusurf/"
+        cp -r ${resolvedNuSessionSource}/crates "$out/source/nu_session/"
+        cp ${resolvedNuSessionSource}/Cargo.poly.toml "$out/source/nu_session/Cargo.poly.toml"
+        cat > "$out/source/nu_session/Cargo.toml" <<'EOF'
+    ${nuSessionCargoManifest}
+    EOF
+        chmod -R u+w "$out/source/nusurf" "$out/source/nu_session"
   '';
   nusurf = pkgs.rustPlatform.buildRustPackage {
     pname = config.rustEnv.package.name;

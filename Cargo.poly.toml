@@ -20,6 +20,7 @@ path = "src/bin/live_fixture_server.rs"
 [dependencies]
 nu-plugin = true
 nu-protocol = true
+nu_session_protocol_cdp = { path = "../nu_session/crates/protocol_cdp" }
 serde_json = true
 tracing = true
 tracing-subscriber = { default-features = false, features = ["fmt"] }
