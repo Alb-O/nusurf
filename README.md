@@ -207,7 +207,7 @@ ws close cdp
 
 A nix package and Home Manager module are included:
 
-Example Home Manager usage inside the polyrepo:
+Example Home Manager usage inside an AgentRoots workspace:
 
 ```nix
 {
@@ -217,24 +217,24 @@ Example Home Manager usage inside the polyrepo:
 
   programs.nusurf = {
     enable = true;
-    managedCargoDir = ./repos/poly-rust-env/modules/managed-cargo;
+    managedCargoDir = ./repos/ar_rust_env/modules/managed-cargo;
   };
 }
 ```
 
-Outside the polyrepo, pass the managed-Cargo path explicitly:
+Outside an AgentRoots workspace, pass the managed-Cargo path explicitly:
 
 ```nix
 let
   nusurfSrc = builtins.fetchTarball "https://github.com/Alb-O/nusurf/archive/main.tar.gz";
-  polyRustEnvSrc = builtins.fetchTarball "https://github.com/Alb-O/poly-rust-env/archive/main.tar.gz";
+  arRustEnvSrc = builtins.fetchTarball "https://github.com/Alb-O/ar_rust_env/archive/main.tar.gz";
 in
 {
   imports = [ "${nusurfSrc}/nix/home-manager.nix" ];
 
   programs.nusurf = {
     enable = true;
-    managedCargoDir = "${polyRustEnvSrc}/modules/managed-cargo";
+    managedCargoDir = "${arRustEnvSrc}/modules/managed-cargo";
   };
 }
 ```
@@ -244,7 +244,7 @@ longer assumes sibling repo checkouts exist.
 
 ## Devenv
 
-For local polyrepo development, `nusurf` is also exposed as a shared `devenv`
+For local AgentRoots development, `nusurf` is also exposed as a shared `devenv`
 import surface. The superproject's generated `devenv.local.yaml` now injects:
 
 ```yaml

@@ -28,10 +28,10 @@ let
       managedCargoDir
     else
       throw ''
-        nusurf packaging requires poly-rust-env/modules/managed-cargo.
+        nusurf packaging requires ar_rust_env/modules/managed-cargo.
         Pass `managedCargoDir` to `nix/package.nix`.
         Shared/local-input consumers should source it from an explicit
-        dependency such as `inputs.poly-rust-env`.
+        dependency such as `inputs.ar_rust_env`.
       '';
   resolvedCargoCatalogPath =
     if cargoCatalogPath != null then
