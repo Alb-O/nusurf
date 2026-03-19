@@ -6,7 +6,7 @@ The plugin binary exposes the `ws` command. The `cdp` command come from the bund
 
 ## Repo Boundary
 
-`nusurf` now owns the Nu-facing product surface:
+`nusurf` owns the Nu-facing product surface:
 
 - bundled `cdp` Nu modules
 - CDP schema assets
@@ -131,7 +131,7 @@ Example saved NUON:
 
 Saved context files are user-managed Nu data. Nusurf does not rewrite them.
 
-Edit `user` freely. Treat `plugin` as plugin-owned data and `nusurf.browser` and `nusurf.page` as saved CDP connection data. `cdp context normalize` checks shape and ownership. It does not check whether browser/page records still point to live CDP sessions.
+Edit `user` freely. Treat `plugin` as plugin-owned data and `nusurf.browser` and `nusurf.page` as saved CDP connection data. `cdp context normalize` checks shape and ownership. It does not check whether browser/page records point to live CDP sessions.
 
 Example update:
 
@@ -250,13 +250,13 @@ in
 }
 ```
 
-You can still pass `programs.nusurf.package` explicitly, but the module no
-longer assumes sibling repo checkouts exist.
+You can also pass `programs.nusurf.package` explicitly. The module builds
+without assuming sibling repo checkouts.
 
 ## Devenv
 
-For local AgentRoots development, `nusurf` is also exposed as a shared `devenv`
-import surface. The superproject's generated `devenv.local.yaml` now injects:
+For local AgentRoots development, `nusurf` is exposed as a shared `devenv`
+import surface. The superproject's generated `devenv.local.yaml` injects:
 
 ```yaml
 inputs:
