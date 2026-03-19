@@ -217,7 +217,7 @@ Example Home Manager usage inside an AgentRoots workspace:
 
   programs.nusurf = {
     enable = true;
-    managedCargoDir = ./repos/ar_rust_env/modules/managed-cargo;
+    managedCargoDir = ./repos/ar_devenv_rust/modules/managed-cargo;
   };
 }
 ```
@@ -227,14 +227,14 @@ Outside an AgentRoots workspace, pass the managed-Cargo path explicitly:
 ```nix
 let
   nusurfSrc = builtins.fetchTarball "https://github.com/Alb-O/nusurf/archive/main.tar.gz";
-  arRustEnvSrc = builtins.fetchTarball "https://github.com/Alb-O/ar_rust_env/archive/main.tar.gz";
+  arDevenvRustSrc = builtins.fetchTarball "https://github.com/Alb-O/ar_devenv_rust/archive/main.tar.gz";
 in
 {
   imports = [ "${nusurfSrc}/nix/home-manager.nix" ];
 
   programs.nusurf = {
     enable = true;
-    managedCargoDir = "${arRustEnvSrc}/modules/managed-cargo";
+    managedCargoDir = "${arDevenvRustSrc}/modules/managed-cargo";
   };
 }
 ```

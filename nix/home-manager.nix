@@ -40,7 +40,7 @@ in
       );
       default = null;
       description = ''
-        Path to `ar_rust_env/modules/managed-cargo` used to build the bundled
+        Path to `ar_devenv_rust/modules/managed-cargo` used to build the bundled
         Nusurf package when `programs.nusurf.package` is not set.
       '';
     };
