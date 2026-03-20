@@ -280,7 +280,7 @@ Example:
 ```sh
 nu-with-nusurf -c 'help ws'
 nu-with-nusurf -c "use $env.NUSURF_CDP_MODULE; help cdp"
-devenv-run -C . --shell 'command -v nu-with-nusurf'
+run -C . --shell 'command -v nu-with-nusurf'
 ```
 
 ## Dev
@@ -289,7 +289,7 @@ devenv-run -C . --shell 'command -v nu-with-nusurf'
 update-cdp-schema # refresh bundled CDP schema
 
 # build and test the Rust/plugin side from nu_session
-devenv-run -C ../nu_session cargo test --workspace --package nu_session_protocol_cdp
+run -C ../nu_session cargo test --workspace --package nu_session_protocol_cdp
 
 # run the mock-driven Nu coverage
 ./tests/run_suite mock_all
